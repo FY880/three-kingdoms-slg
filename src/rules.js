@@ -6,7 +6,7 @@
  * ============================================================ */
 
 /* ---------- 1. 数据（与 CSV 配表一致）---------- */
-const TERRAIN = {
+let TERRAIN = {
   plain:{name:'平原',move:1.0,atk:1.0,def:1.0,cav:1.15,inf:1.0,arch:1.0,eng:0.9,scout:1.0,ambush:0,flood:0,choke:0,marchDmg:0,color:'#cfe8a9'},
   hill:{name:'丘陵',move:0.8,atk:1.0,def:1.15,cav:0.9,inf:1.1,arch:1.1,eng:1.0,scout:0.9,ambush:0.1,flood:0,choke:0,marchDmg:0,color:'#bcd99a'},
   mountain:{name:'山地',move:0.6,atk:0.9,def:1.3,cav:0.7,inf:1.15,arch:1.0,eng:0.8,scout:0.8,ambush:0.2,flood:0,choke:1,marchDmg:0,color:'#9fae7a'},
@@ -21,7 +21,7 @@ const TERRAIN = {
   bridge:{name:'桥梁栈道',move:1.0,atk:1.0,def:1.0,cav:0.9,inf:1.0,arch:1.0,eng:1.0,scout:1.0,ambush:0,flood:0,choke:1,marchDmg:0,color:'#c2b08a'}
 };
 
-const WEATHER = {
+let WEATHER = {
   sun:{name:'晴',move:1.0,atk:1.0,def:1.0,fire:1.0,cav:1.0,scout:1.0,flood:0.0,morale:0},
   rain:{name:'雨',move:0.8,atk:1.0,def:1.0,fire:0.2,cav:0.8,scout:0.9,flood:1.5,morale:-5},
   snow:{name:'雪严寒',move:0.7,atk:1.0,def:1.0,fire:1.4,cav:0.8,scout:0.9,flood:0.5,morale:-8},
@@ -30,14 +30,14 @@ const WEATHER = {
   drought:{name:'酷暑旱',move:0.9,atk:1.0,def:1.0,fire:1.8,cav:1.0,scout:1.1,flood:0.2,morale:-6}
 };
 
-const SEASON = {
+let SEASON = {
   spring:{name:'春',grain:1.1,w:{rain:3,sun:3,fog:1,snow:1,wind:1,drought:0}},
   summer:{name:'夏',grain:1.2,w:{rain:2,sun:4,fog:1,snow:0,wind:1,drought:2}},
   autumn:{name:'秋',grain:1.0,w:{rain:2,sun:3,fog:1,snow:0,wind:2,drought:1}},
   winter:{name:'冬',grain:0.7,w:{rain:1,sun:2,fog:1,snow:4,wind:1,drought:0}}
 };
 
-const FORMATIONS = {
+let FORMATIONS = {
   fengshi:{name:'锋矢',atk:1.2,def:0.85,morale:1.0,flank:0.9,reqInt:0},
   heyi:{name:'鹤翼',atk:1.0,def:1.0,morale:1.0,flank:1.3,reqInt:0},
   fangyuan:{name:'方圆',atk:0.9,def:1.3,morale:1.1,flank:0.9,reqInt:0},
@@ -46,7 +46,7 @@ const FORMATIONS = {
   yulin:{name:'鱼鳞',atk:0.95,def:1.2,morale:1.05,flank:0.95,reqInt:0}
 };
 
-const GENERALS = [
+let GENERALS = [
   {id:'cao1',name:'曹操',star:5,force:92,intellect:89,leadership:96,speed:78,style:'鹰扬',trait:'多疑',troop:'骑',suit:'S',skill:'奸雄',skillDesc:'每回合概率提升全军攻击并降低敌方防御'},
   {id:'liu1',name:'刘备',star:5,force:75,intellect:82,leadership:90,speed:70,style:'持重',trait:'仁德',troop:'步',suit:'S',skill:'仁德',skillDesc:'提升全军士气与伤兵恢复'},
   {id:'sun1',name:'孙权',star:4,force:78,intellect:84,leadership:88,speed:76,style:'奇变',trait:'沉稳',troop:'弓',suit:'A',skill:'制衡',skillDesc:'概率使敌方主动战法失效并反弹'},
@@ -224,8 +224,73 @@ function simulateCombat(attacker, defender, ctx){
           defenders:defender.map(u=>({name:u.g.name,soldiers:u.soldiers,alive:u.alive}))};
 }
 
-/* ---------- 8. 导出 ---------- */
+/* ---------- 8. 配表热加载（CSV → 数据表）---------- */
+function num(v,d){ const n=parseFloat(v); return isNaN(n)?(d||0):n; }
+function parseCSV(text){
+  const lines=text.trim().split(/\r?\n/); if(!lines.length) return [];
+  const headers=lines[0].split(',').map(h=>h.trim());
+  const out=[];
+  for(let i=1;i<lines.length;i++){ const line=lines[i]; if(!line.trim()) continue;
+    const vals=line.split(','); const o={}; headers.forEach((h,j)=> o[h]= (vals[j]!==undefined?vals[j].trim():'')); out.push(o); }
+  return out;
+}
+function toTerrain(rows){ const o={}; rows.forEach(r=>{ o[r.key]={name:r.name,color:r.color,move:num(r.move,1),atk:num(r.atk,1),def:num(r.def,1),cav:num(r.cav,1),inf:num(r.inf,1),arch:num(r.arch,1),eng:num(r.eng,1),scout:num(r.scout,1),ambush:num(r.ambush,0),flood:num(r.flood,0),choke:num(r.choke,0),marchDmg:num(r.marchDmg,0)}; }); return o; }
+function toWeather(rows){ const o={}; rows.forEach(r=>{ o[r.key]={name:r.name,move:num(r.move,1),atk:num(r.atk,1),def:num(r.def,1),fire:num(r.fire,1),cav:num(r.cav,1),scout:num(r.scout,1),flood:num(r.flood,0),morale:num(r.morale,0)}; }); return o; }
+function toSeason(rows){ const o={}; rows.forEach(r=>{ o[r.key]={name:r.name,grain:num(r.grain,1),w:{rain:num(r.rain,1),sun:num(r.sun,1),fog:num(r.fog,1),snow:num(r.snow,1),wind:num(r.wind,1),drought:num(r.drought,1)}}; }); return o; }
+function toFormations(rows){ const o={}; rows.forEach(r=>{ o[r.key]={name:r.name,atk:num(r.atk,1),def:num(r.def,1),morale:num(r.morale,1),flank:num(r.flank,1),reqInt:num(r.reqInt,0)}; }); return o; }
+function toGenerals(rows){ return rows.map(r=>({id:r.id,name:r.name,star:num(r.star,4),force:num(r.force,80),intellect:num(r.intellect,80),leadership:num(r.leadership,80),speed:num(r.speed,70),style:r.style,trait:r.trait,troop:r.troop,suit:r.suit,skill:r.skill,skillDesc:r.skillDesc})); }
+// 用解析后的 CSV 覆盖内置数据（实现热加载）
+function reload(cfg){
+  if(cfg.terrain) TERRAIN=toTerrain(cfg.terrain);
+  if(cfg.weather) WEATHER=toWeather(cfg.weather);
+  if(cfg.season) SEASON=toSeason(cfg.season);
+  if(cfg.formations) FORMATIONS=toFormations(cfg.formations);
+  if(cfg.generals) GENERALS=toGenerals(cfg.generals);
+  RULES.TERRAIN=TERRAIN; RULES.WEATHER=WEATHER; RULES.SEASON=SEASON; RULES.FORMATIONS=FORMATIONS; RULES.GENERALS=GENERALS;
+  return true;
+}
+// 浏览器：从 data/ 拉取 CSV 并热加载（file:// 下 fetch 失败则由 Demo 回退内置默认）
+async function loadConfigFromServer(base){
+  base = base || 'data/';
+  const files={terrain:'terrain.csv',weather:'weather.csv',season:'season.csv',formations:'formations.csv',generals:'generals.csv'};
+  const cfg={};
+  for(const k in files){ const res=await fetch(base+files[k]); if(!res.ok) throw new Error('缺少 '+files[k]); cfg[k]=parseCSV(await res.text()); }
+  reload(cfg); return cfg;
+}
+
+// Node：从目录同步读取全部 CSV 并热加载（调平衡/校验用，等价于浏览器版 loadConfigFromServer）
+function loadCSVFromDir(dir){
+  const fs = (typeof require!=='undefined') ? require('fs') : null;
+  if(!fs) throw new Error('loadCSVFromDir 仅 Node 环境可用');
+  const files={terrain:'terrain.csv',weather:'weather.csv',season:'season.csv',formations:'formations.csv',generals:'generals.csv'};
+  const cfg={};
+  for(const k in files){ cfg[k]=parseCSV(fs.readFileSync(dir+'/'+files[k],'utf8')); }
+  return reload(cfg);
+}
+
+/* ---------- 9. 外交关系模型（纯逻辑，单机 AI 用）---------- */
+// relation: 'neutral'（中立） | 'ally'（同盟：互不侵犯） | 'rival'（敌对：可“拉一个 AI 打另一个”）
+function createDiplomacy(lordIds){
+  const m={};
+  lordIds.forEach(a=>{ m[a]={}; lordIds.forEach(b=>{ if(a!==b) m[a][b]='neutral'; }); });
+  return m;
+}
+function getRelation(dip,a,b){ return (dip[a]&&dip[a][b])||'neutral'; }
+function setRelation(dip,a,b,rel){ if(dip[a]) dip[a][b]=rel; if(dip[b]) dip[b][a]=rel; }
+function isAlly(dip,a,b){ return getRelation(dip,a,b)==='ally'; }
+function isRival(dip,a,b){ return getRelation(dip,a,b)==='rival'; }
+function canAttack(dip,me,target){ return !isAlly(dip,me,target); }
+// 评分调整：同盟→绝对不攻(-1e9)；敌对→优先(+5)；否则 0
+function diploScoreAdj(dip,me,target){
+  if(isAlly(dip,me,target)) return -1e9;
+  if(isRival(dip,me,target)) return 5;
+  return 0;
+}
+
+/* ---------- 10. 导出 ---------- */
 const RULES = {TERRAIN,WEATHER,SEASON,FORMATIONS,GENERALS,environmentModifiers,chokePenalty,
-  waterAttack,emptyFort,ambushDetect,makeUnit,miaoSuan,simulateCombat,styleCoef,suitCoef,STYLE_RPS};
+  waterAttack,emptyFort,ambushDetect,makeUnit,miaoSuan,simulateCombat,styleCoef,suitCoef,STYLE_RPS,
+  parseCSV,reload,loadConfigFromServer,loadCSVFromDir,
+  createDiplomacy,getRelation,setRelation,isAlly,isRival,canAttack,diploScoreAdj};
 if (typeof module !== 'undefined' && module.exports) module.exports = RULES;
 if (typeof window !== 'undefined') window.RULES = RULES;

@@ -32,6 +32,19 @@
   .legend { font-size:11px; line-height:1.5; display:grid; grid-template-columns:1fr 1fr; gap:2px 10px; margin-top:6px; }
   .legend i { display:inline-block; width:10px; height:10px; margin-right:4px; vertical-align:middle; }
   .hint { color:#ffd479; font-size:12px; } .win{color:#7CFC8A;} .lose{color:#ff7b7b;}
+  /* 外交面板 */
+  #dipSheet { position:fixed; left:0; right:0; bottom:0; max-height:70%; background:#1c2128; border-top:2px solid #6a5acd;
+    border-radius:14px 14px 0 0; transform:translateY(100%); transition:transform .22s ease; z-index:25; padding:12px 14px calc(14px + env(safe-area-inset-bottom)); overflow:auto; }
+  #dipSheet.show { transform:translateY(0); }
+  #dipSheet h3 { margin:4px 0 6px; font-size:14px; color:#b9a8ff; }
+  #dipSheet .close { position:absolute; right:12px; top:10px; background:#3a414b; color:#fff; border:none; border-radius:6px; padding:4px 10px; font-size:13px; }
+  .dipRow { background:#2c323b; border-radius:8px; padding:8px 10px; margin-bottom:8px; }
+  .dipRow .dipTitle { margin-bottom:6px; font-size:13px; }
+  .dipBtns { display:flex; gap:6px; }
+  .dipBtns button { flex:1; min-height:36px; font-size:13px; border:none; border-radius:7px; color:#fff; background:#4a525c; }
+  .dipBtns button.on { background:#6a5acd; }
+  .dipBtns button.rival.on { background:#d24b4b; }
+  .dipNote { font-size:12px; color:#9aa4b0; line-height:1.6; }
   #toast { position:fixed; left:50%; top:14%; transform:translateX(-50%); background:rgba(0,0,0,.8); padding:8px 14px;
     border-radius:8px; font-size:13px; z-index:30; opacity:0; transition:opacity .2s; pointer-events:none; max-width:86%; text-align:center;}
   #toast.show{opacity:1;}
@@ -52,6 +65,8 @@
     <button id="btnTime">推进时辰</button>
     <button id="btnAmbush" class="alt">伏兵</button>
     <button id="btnFlood" class="alt">水攻</button>
+    <button id="btnDiplomacy" class="alt">外交</button>
+    <button id="btnReload" class="alt">配表</button>
     <button id="btnReset" class="alt">重置</button>
   </div>
 </div>
@@ -66,6 +81,12 @@
   <div class="legend" id="legend"></div>
 </div>
 <div id="toast"></div>
+<div id="dipSheet">
+  <button class="close" onclick="closeDiplomacy()">收起</button>
+  <h3>外交 · 诸侯盟约</h3>
+  <div class="dipNote">同盟：与该诸侯互不侵犯（其不会攻你，你亦不可攻它）。敌对：你与盟友将优先夹击该诸侯（拉一个 AI 打另一个）。</div>
+  <div id="dipBody" style="margin-top:8px"></div>
+</div>
 
 <script src="src/rules.js"></script>
 <script>
@@ -83,8 +104,9 @@ function ri(a,b){ return Math.floor(a+rnd()*(b-a+1)); }
 function pickW(w){ const tot=Object.values(w).reduce((s,v)=>s+v,0); let r=rnd()*tot; for(const k in w){ r-=w[k]; if(r<=0) return k; } return Object.keys(w)[0]; }
 
 // ---- 地图 ----
-let map=[], seasonKey='spring', weatherKey='sun', time=0, ambushMode=false, floodMode=false;
-const TK=Object.keys(R.TERRAIN);
+let map=[], seasonKey='spring', weatherKey='sun', time=0, ambushMode=false, floodMode=false, diplomacyMode=false;
+let TK=Object.keys(R.TERRAIN);
+function refreshDataRefs(){ TK=Object.keys(R.TERRAIN); }
 
 // ---- AI 诸侯势力 ----
 
@@ -101,6 +123,33 @@ const ROSTER=['cao1','guan1','zhao1','zhu1','zhou1'];
 function isAI(o){ return o&&o.startsWith('ai_'); }
 function lordById(o){ return LORD_BY_ID[o]; }
 
+// 外交关系（player + 各 AI 诸侯）；初始全部中立
+const DIP = R.createDiplomacy(['player', ...AI_LORDS.map(l=>l.id)]);
+
+// ---- 外交 / 同盟（以 rules.js 的 DIP 纯逻辑模型为唯一真相源）----
+// 关系状态：'ally' 同盟(互不侵犯) | 'neutral' 中立 | 'rival' 敌对(用于“拉一个 AI 打另一个”)
+let reputation=50;                  // 信誉：背盟降低，低则更易被诸侯攻
+function initRelations(){
+  AI_LORDS.forEach(L=> R.setRelation(DIP,'player',L.id,'neutral'));
+  for(let i=0;i<AI_LORDS.length;i++) for(let j=i+1;j<AI_LORDS.length;j++){
+    R.setRelation(DIP, AI_LORDS[i].id, AI_LORDS[j].id, Math.random()<0.3?'ally':'neutral');
+  }
+}
+// 玩家设置与某诸侯的关系；敌对(war)时让所有盟友也视其为敌（共同讨伐）
+function playerSetRel(b, s){
+  const prev = R.getRelation(DIP,'player',b);
+  const next = (s==='war') ? 'rival' : s;
+  R.setRelation(DIP,'player',b,next);
+  if(s==='war'){
+    AI_LORDS.forEach(L=>{ if(L.id!==b && R.isAlly(DIP,'player',L.id)) R.setRelation(DIP,L.id,b,'rival'); });
+  } else if(prev==='rival'){
+    AI_LORDS.forEach(L=>{ if(L.id!==b && R.isAlly(DIP,'player',L.id) && R.isRival(DIP,L.id,b)) R.setRelation(DIP,L.id,b,'neutral'); });
+  }
+  if(prev==='ally' && s!=='ally') reputation=Math.max(0,reputation-10);   // 背盟损信誉
+  if(s==='ally' && prev!=='ally')  reputation=Math.min(100,reputation+5);
+  openDiplomacy();
+}
+
 // 任意地块的守军（玩家/AI/中立统一）
 function defenderArmy(tile){
   if(tile.owner==='player'){ const u=ROSTER.slice(0,3).map((id,i)=>R.makeUnit(id,1400,i===0?'fengshi':(i===1?'heyi':'yulin'),{morale:85})); return {units:u,total:4200}; }
@@ -111,16 +160,24 @@ function defenderArmy(tile){
   return {units:u,total:tile.soldiers};
 }
 
-// AI 评分：打不打得赢 + 目标价值 + 性格偏好
+// AI 评分：打不打得赢 + 目标价值 + 性格偏好 + 外交关系
 function scoreTarget(lord,t,def){
   const myPower=lord.strength*3;
-  const playerTarget = (t.owner==='player');
-  const thr = playerTarget ? (lord.personality==='侵略'||lord.personality==='霸权'?1.1:9.9) : 1.15;
-  if(myPower < def.total*thr) return 0;
+  const isPlayer=(t.owner==='player');
+  if(isPlayer){
+    if(R.isAlly(DIP,'player',lord.id)) return 0;                       // 同盟互不侵犯
+    const base=(lord.personality==='侵略'||lord.personality==='霸权')?1.05:(lord.personality==='稳健'?9.9:6.0);
+    const rep=reputation<40?0.85:1.0;                                  // 信誉低更易被攻
+    if(myPower < def.total*base*rep) return 0;
+  } else {
+    if(t.owner!=='none' && R.isAlly(DIP,lord.id,t.owner)) return 0;    // 不攻盟友
+    if(myPower < def.total*1.15) return 0;
+  }
   let s=1;
+  if(R.isRival(DIP,lord.id,t.owner)) s += 5;                           // 共同讨伐：优先夹击敌对诸侯
   if(t.owner==='none') s += 2+t.lvl;
-  else if(playerTarget) s += (lord.personality==='霸权')?12:8;
-  else s += (lord.personality==='霸权')?8:2;            //  rival AI
+  else if(isPlayer) s += (lord.personality==='霸权')?12:8;
+  else s += (lord.personality==='霸权')?8:2;                           //  rival AI
   if(t.t==='plain' && (lord.personality==='侵略'||lord.personality==='霸权')) s+=2;
   if(t.t==='city') s+=3;
   return s;
@@ -249,6 +306,13 @@ function handleTap(x,y){
     render(); return;
   }
   if(c.owner==='player'){ showInfo(x,y); return; }
+  if(diplomacyMode){
+    if(isAI(c.owner)) openDiplomacy(c.owner);
+    else if(c.owner==='player') showInfo(x,y);
+    else toast('外交只能对诸侯势力操作（点对应颜色地块）');
+    return;
+  }
+  if(isAI(c.owner) && R.isAlly(DIP,'player',c.owner)){ toast('不可进攻盟友（'+lordById(c.owner).name+'）'); return; }
   if(!validTarget(x,y)){ toast('只能进攻与领地相邻的地块'); return; }
   doBattle(x,y);
 }
@@ -281,6 +345,31 @@ function log(t,cls){ const el=document.getElementById('log'); const d=document.c
 function toast(t){ const el=document.getElementById('toast'); el.textContent=t; el.classList.add('show'); clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('show'),1600); }
 function openSheet(){ document.getElementById('sheet').classList.add('show'); }
 function closeSheet(){ document.getElementById('sheet').classList.remove('show'); }
+// 外交面板：列出各诸侯与玩家关系，可切换 同盟/中立/敌对
+function relLabel(s){ return s==='ally'?'同盟':s==='rival'?'敌对':'中立'; }
+function openDiplomacy(focus){
+  const el=document.getElementById('dipBody');
+  el.innerHTML = AI_LORDS.map(L=>{
+    const s=R.getRelation(DIP,'player',L.id);
+    const btns=['ally','neutral','war'].map(st=>{
+      const on=(st==='war'? s==='rival' : s===st) ? 'on' : '';
+      const cls = st==='war' ? 'rival' : '';
+      const txt = st==='ally'?'同盟':st==='war'?'敌对':'中立';
+      return `<button class="${cls} ${on}" data-b="${L.id}" data-s="${st}">${txt}</button>`;
+    }).join('');
+    const hl = (focus===L.id) ? ' style="outline:2px solid #b9a8ff"' : '';
+    return `<div class="dipRow"${hl}><div class="dipTitle"><b style="color:${L.color}">${L.name}</b> <span class="tag">${L.personality}</span> <span class="tag">关系：${relLabel(s)}</span></div><div class="dipBtns">${btns}</div></div>`;
+  }).join('')
+    + `<div class="dipNote" style="margin-top:6px">信誉：${reputation} ｜ 同盟=互不侵犯；敌对=你与盟友优先夹击该诸侯（拉一个 AI 打另一个）。</div>`;
+  document.getElementById('dipSheet').classList.add('show');
+}
+function closeDiplomacy(){ document.getElementById('dipSheet').classList.remove('show'); }
+document.getElementById('dipBody').addEventListener('click', e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  const L=lordById(b.dataset.b);
+  playerSetRel(b.dataset.b, b.dataset.s);
+  toast('已与【'+L.name+'】设为'+relLabel(b.dataset.s==='war'?'rival':b.dataset.s));
+});
 function refreshTop(){ let land=0,enemy=0; for(let y=0;y<H;y++)for(let x=0;x<W;x++){ const o=map[y][x].owner; if(o==='player')land++; else if(o!=='none')enemy++; }
   document.getElementById('tLand').textContent='领地'+land;
   document.getElementById('tEnemy').textContent='敌'+enemy;
@@ -299,14 +388,17 @@ function buildLegend(){ let h=TK.map(k=>`<span><i style="background:${R.TERRAIN[
 function resize(){ cv.width=wrap.clientWidth; cv.height=wrap.clientHeight; clampCam(); render(); }
 window.addEventListener('resize',resize);
 window.closeSheet=closeSheet;
+window.closeDiplomacy=closeDiplomacy;
 
 document.getElementById('btnTime').onclick=()=>{ time++; seasonKey=['spring','summer','autumn','winter'][Math.floor(time/3)%4]; weatherKey=pickW(R.SEASON[seasonKey].w); aiTurn(); toast(`进入【${R.SEASON[seasonKey].name}】· 天气【${R.WEATHER[weatherKey].name}】· 诸侯已行动`); log('📊 势力：'+standings()); };
-document.getElementById('btnAmbush').onclick=function(){ ambushMode=!ambushMode; floodMode=false; this.classList.toggle('on',ambushMode); document.getElementById('btnFlood').classList.remove('on'); toast(ambushMode?'伏兵模式：点森林布伏':'已退出伏兵'); };
-document.getElementById('btnFlood').onclick=function(){ floodMode=!floodMode; ambushMode=false; this.classList.toggle('on',floodMode); document.getElementById('btnAmbush').classList.remove('on'); toast(floodMode?'水攻模式：点低洼放水':'已退出水攻'); };
+document.getElementById('btnAmbush').onclick=function(){ ambushMode=!ambushMode; floodMode=false; diplomacyMode=false; this.classList.toggle('on',ambushMode); document.getElementById('btnFlood').classList.remove('on'); document.getElementById('btnDiplomacy').classList.remove('on'); closeDiplomacy(); toast(ambushMode?'伏兵模式：点森林布伏':'已退出伏兵'); };
+document.getElementById('btnFlood').onclick=function(){ floodMode=!floodMode; ambushMode=false; diplomacyMode=false; this.classList.toggle('on',floodMode); document.getElementById('btnAmbush').classList.remove('on'); document.getElementById('btnDiplomacy').classList.remove('on'); closeDiplomacy(); toast(floodMode?'水攻模式：点低洼放水':'已退出水攻'); };
+document.getElementById('btnDiplomacy').onclick=function(){ diplomacyMode=!diplomacyMode; ambushMode=false; floodMode=false; this.classList.toggle('on',diplomacyMode); document.getElementById('btnAmbush').classList.remove('on'); document.getElementById('btnFlood').classList.remove('on'); if(diplomacyMode){ openDiplomacy(); toast('外交模式：点诸侯地块可结盟/敌对'); } else { closeDiplomacy(); toast('已退出外交'); } };
+document.getElementById('btnReload').onclick=async function(){ try{ await R.loadConfigFromServer('data/'); refreshDataRefs(); buildLegend(); refreshTop(); render(); toast('配表已重载，数值即时生效'); }catch(e){ toast('配表重载失败（请用 http 服务运行）：'+e.message); } };
 document.getElementById('btnReset').onclick=()=>{ genMap(); buildLegend(); toast('地图已重置'); };
 
-genMap(); buildLegend(); resize();
-toast('点黄色地块出征；拖动平移，双指缩放');
+initRelations(); genMap(); buildLegend(); resize();
+toast('点黄色地块出征；拖动平移，双指缩放；点“外交”结盟诸侯');
 </script>
 </body>
 </html>
