@@ -1,0 +1,14 @@
+# 系统/编辑器临时文件
+.DS_Store
+*.swp
+*.swo
+*.log
+
+# 依赖（若将来加构建工具）
+node_modules/
+dist/
+build/
+
+# 本地测试/调试产物
+/tmp/
+*.bak
