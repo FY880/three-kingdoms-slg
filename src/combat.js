@@ -1,22 +1,21 @@
 /* ============================================================
- *  combat.js —— 战斗 / 环境 / 兵书（UMD）
- *  依赖：data(state)、util(clamp)。
+ *  combat.js —— 战斗 / 环境 / 兵书 / 战法演算（UMD）
+ *  依赖：data(state)、util(clamp)、skills(战法引擎)。
  *  所有对数据表的读取都在「调用时」走 DATA.state.*，确保热加载即时生效。
  * ============================================================ */
 (function (global, factory) {
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = factory(require('./data.js'), require('./util.js'));
+    module.exports = factory(require('./data.js'), require('./util.js'), require('./skills.js'));
   } else {
-    global.RULES_COMBAT = factory(global.RULES_DATA, global.RULES_UTIL);
+    global.RULES_COMBAT = factory(global.RULES_DATA, global.RULES_UTIL, global.RULES_SKILLS);
   }
-})(typeof self !== 'undefined' ? self : this, function (DATA, UTIL) {
+})(typeof self !== 'undefined' ? self : this, function (DATA, UTIL, SKILLS) {
   const clamp = UTIL.clamp;
 
   const SUIT = { S: 1.2, A: 1.0, B: 0.85, C: 0.7 };
-  // 将道风格 RPS：鹰扬>持重>奇变>鹰扬
   const STYLE_RPS = { 鹰扬: '持重', 持重: '奇变', 奇变: '鹰扬' };
-  // 战斗节奏配置：回合上限、猝死阶段（保证收束、节奏明快）、伤害曲线、伏兵未命中惩罚
   const COMBAT_CFG = { maxRound: 10, suddenDeathFrom: 7, suddenDeathRamp: 0.3, dmgBase: 1.0, ambushMissMorale: -15 };
+  const FORTIFIED = { city: 1, defile: 1, bridge: 1 };
 
   function suitCoef(s) { return SUIT[s] || 1.0; }
 
@@ -24,24 +23,15 @@
   function environmentModifiers(terrainKey, weatherKey, troopType) {
     const t = DATA.state.TERRAIN[terrainKey] || DATA.state.TERRAIN.plain;
     const w = DATA.state.WEATHER[weatherKey] || DATA.state.WEATHER.sun;
-    const troopAtk = t[troopType] !== undefined ? t[troopType] : 1.0;
-    return {
-      move: t.move * w.move,
-      atk: t.atk * w.atk,
-      def: t.def * w.def,
-      troopAtk,
-      fire: w.fire,
-      scout: w.scout,
-      flood: w.flood * (1 + t.flood),
-      morale: w.morale,
-      ambush: t.ambush,
-      choke: t.choke
-    };
+    const col = (DATA.state.TROOPS[troopType] && DATA.state.TROOPS[troopType].fieldCol) || 'inf';
+    const troopAtk = t[col] !== undefined ? t[col] : 1.0;
+    return { move: t.move * w.move, atk: t.atk * w.atk, def: t.def * w.def, troopAtk,
+      fire: w.fire, scout: w.scout, flood: w.flood * (1 + t.flood), morale: w.morale, ambush: t.ambush, choke: t.choke };
   }
   function chokePenalty(terrainKey) {
     const t = DATA.state.TERRAIN[terrainKey];
     if (!t || !t.choke) return 1.0;
-    return Math.max(0.5, 1 - 0.22 * t.choke);   // 天险依 CSV.choke 决定攻方受罚强度（数据驱动）
+    return Math.max(0.5, 1 - 0.22 * t.choke);
   }
 
   /* ---------- 兵书指令（诡道）---------- */
@@ -64,19 +54,56 @@
     return Math.random() > detectChance;
   }
 
-  /* ---------- 部队构建 ---------- */
+  /* ---------- 兵种克制 ---------- */
+  function troopRPS(att, def) {
+    const T = DATA.state.TROOPS; const a = T[att.g.troop], b = T[def.g.troop];
+    if (!a || !b) return 1.0;
+    if (a.beat && a.beat === def.g.troop) return 1.15;
+    if (b.beat && b.beat === att.g.troop) return 0.88;
+    return 1.0;
+  }
+
+  /* ---------- 阵营羁绊 + 武将缘分 ---------- */
+  function applyTeamBonus(army) {
+    const alive = army.filter(u => u.alive);
+    const ids = alive.map(u => u.g.id);
+    const facs = alive.map(u => u.faction);
+    const atkPct = [], defPct = [], rates = [], names = [];
+    const f0 = facs[0];
+    if (facs.length && facs.every(f => f === f0) && DATA.state.FACTIONS[f0]) {
+      const f = DATA.state.FACTIONS[f0];
+      atkPct.push(f.bondAtkPct); defPct.push(f.bondDefPct); rates.push(f.bondRate); names.push(f.name + '羁绊');
+    }
+    for (const b of Object.values(DATA.state.BONDS)) {
+      if (b.members.every(m => ids.includes(m))) { atkPct.push(b.atkPct); rates.push(b.rate); names.push(b.name); }
+    }
+    const aMul = 1 + atkPct.reduce((s, v) => s + v, 0);
+    const dMul = 1 + defPct.reduce((s, v) => s + v, 0);
+    const rBon = rates.reduce((s, v) => s + v, 0);
+    army.forEach(u => { u.atkMul *= aMul; u.defMul *= dMul; u.bondRate = rBon; u.bondNames = names; });
+    return names;
+  }
+
+  /* ---------- 部队构建（含等级成长）---------- */
   function makeUnit(generalId, soldiers, formationKey, opts) {
     opts = opts || {};
     const g = DATA.state.GENERALS.find(x => x.id === generalId) || DATA.state.GENERALS[0];
-    const isBlade = g.force >= g.intellect;
-    const primary = isBlade ? g.force : g.intellect;
-    const defStat = isBlade ? g.leadership : g.intellect;
+    const lv = g.level || 1;
+    const grow = 1 + (lv - 1) * 0.06;
+    const force = Math.round(g.force * grow), intellect = Math.round(g.intellect * grow);
+    const leadership = Math.round(g.leadership * grow), speed = Math.round(g.speed * grow);
+    const isBlade = force >= intellect;
+    const primary = isBlade ? force : intellect;
+    const defStat = isBlade ? leadership : intellect;
     const f = DATA.state.FORMATIONS[formationKey] || DATA.state.FORMATIONS.fengshi;
     return {
       g, soldiers: Math.round(soldiers), max: soldiers,
-      formation: f, isBlade, primary, defStat,
-      speed: g.speed, style: g.style, morale: opts.morale || 80,
-      isAmbush: !!opts.isAmbush, isHidden: !!opts.isHidden, alive: true
+      formation: f, isBlade, primary, defStat, force, intellect, speed, style: g.style, morale: opts.morale || 80,
+      faction: g.faction, skills: SKILLS.skillList(g), bondRate: 0, bondNames: [],
+      atkMul: 1, defMul: 1, speedMul: 1, dots: [], ctrl: '', ctrlTurns: 0,
+      silenced: false, disarmed: false, confused: false, reflectNext: false,
+      immuneCtrl: false, immuneCtrlUsed: false, regenPct: 0, regenMorale: 0, foeHitDown: 0,
+      skillCd: {}, alive: true, isAmbush: !!opts.isAmbush
     };
   }
 
@@ -92,7 +119,7 @@
     return { tianshi, dili, renhe, winProb };
   }
 
-  /* ---------- 战斗模拟（回合制战法演算）---------- */
+  /* ---------- 战斗模拟 ---------- */
   function styleCoef(attStyle, defStyle) {
     if (STYLE_RPS[attStyle] === defStyle) return 1.2;
     if (STYLE_RPS[defStyle] === attStyle) return 0.85;
@@ -117,6 +144,13 @@
     let round = 0, maxRound = CFG.maxRound;
     const allUnits = () => [...attacker, ...defender];
 
+    // 阵营/缘分 + 指挥/被动战法 开场结算
+    const bA = applyTeamBonus(attacker), bD = applyTeamBonus(defender);
+    if (bA.length) log.push('⚑ 我军【' + bA.join('·') + '】生效');
+    if (bD.length) log.push('⚑ 敌军【' + bD.join('·') + '】生效');
+    attacker.forEach(u => SKILLS.commandSetup(u, attacker, log));
+    defender.forEach(u => SKILLS.commandSetup(u, defender, log));
+
     if (ambushFailed) {
       attacker.forEach(u => u.morale = clamp(u.morale + CFG.ambushMissMorale, 20, 100));
       log.push('⚠️ 伏兵被识破！攻方暴露，士气受挫，守军抢得先机');
@@ -126,41 +160,74 @@
       round++;
       log.push(`—— 第${round}回合 ——`);
       let order = allUnits().filter(u => u.alive).sort((a, b) => b.speed - a.speed);
-      if (ambush && round === 1) {
-        order = [...attacker.filter(u => u.alive), ...defender.filter(u => u.alive)].sort((a, b) => b.speed - a.speed);
-      } else if (ambushFailed && round === 1) {
-        order = [...defender.filter(u => u.alive), ...attacker.filter(u => u.alive)].sort((a, b) => b.speed - a.speed);
-      }
+      if (ambush && round === 1) order = [...attacker.filter(u => u.alive), ...defender.filter(u => u.alive)].sort((a, b) => b.speed - a.speed);
+      else if (ambushFailed && round === 1) order = [...defender.filter(u => u.alive), ...attacker.filter(u => u.alive)].sort((a, b) => b.speed - a.speed);
+
       for (const u of order) {
         if (!u.alive) continue;
-        const foes = (attacker.includes(u) ? defender : attacker).filter(x => x.alive);
-        if (!foes.length) break;
-        const target = foes.reduce((m, x) => x.soldiers > m.soldiers ? x : m, foes[0]);
         const isAttackerSide = attacker.includes(u);
-        const sCoef = styleCoef(u.style, target.style);
-        const troopAtk = (DATA.state.TERRAIN[terrainKey][u.g.troop] !== undefined) ? DATA.state.TERRAIN[terrainKey][u.g.troop] : 1.0;
-        const sudden = round >= CFG.suddenDeathFrom ? (1 + (round - CFG.suddenDeathFrom) * CFG.suddenDeathRamp) : 1;
-        let atkMul = u.formation.atk * suitCoef(u.g.suit) * env.atk * troopAtk
-                     * sCoef * (u.morale / 80) * (isAttackerSide ? choke : 1) * (u.isAmbush && round === 1 ? 1.5 : 1) * sudden;
-        const K = 150;
-        const DAMAGE_SCALE = 4.0;
-        const effDef = target.defStat * env.def;   // 地形防御加成：高城防/山地降低守军承伤（数据驱动）
-        const mitigation = effDef / (effDef + K);
-        const dmg = Math.max(1, Math.round(u.primary * atkMul * (1 - mitigation) * DAMAGE_SCALE * CFG.dmgBase));
-        target.soldiers -= dmg;
-        log.push(`${u.g.name}(${u.isBlade ? '兵刃' : '谋略'}) → ${target.g.name} 造成 ${dmg} 伤害（剩${Math.max(0, target.soldiers)}）`);
-        if (Math.random() < 0.3) {
-          const extra = Math.round(dmg * 0.5);
-          target.soldiers -= extra;
-          log.push(`  ⚡ ${u.g.name} 发动【${u.g.skill}】追加 ${extra} 伤害`);
+        const allies = isAttackerSide ? attacker : defender;
+        const foes = isAttackerSide ? defender : attacker;
+        const aliveFoes = foes.filter(x => x.alive);
+        if (!aliveFoes.length) break;
+
+        // 控制：震慑/沉默/缴械/混乱
+        if (u.ctrl === 'stun') { log.push(`  💫 ${u.g.name} 被震慑，本回合无法行动`); continue; }
+        if (u.ctrl === 'silence') log.push(`  🤫 ${u.g.name} 被沉默，战法受限`);
+
+        // 普攻目标（混乱则误击友军）
+        let target;
+        if (u.ctrl === 'confuse') {
+          const mates = allies.filter(x => x.alive && x !== u);
+          target = mates.length ? mates[Math.floor(Math.random() * mates.length)] : aliveFoes[0];
+          log.push(`  🌀 ${u.g.name} 混乱，误击${target === aliveFoes[0] ? '敌' : '友'}军`);
+        } else {
+          target = aliveFoes.reduce((m, x) => x.soldiers > m.soldiers ? x : m, aliveFoes[0]);
         }
-        if (target.soldiers <= 0) { target.alive = false; target.soldiers = 0; log.push(`  ☠ ${target.g.name} 败退`); }
+        if (!u.disarmed) {
+          const sCoef = styleCoef(u.style, target.style);
+          const col = (DATA.state.TROOPS[u.g.troop] && DATA.state.TROOPS[u.g.troop].fieldCol) || 'inf';
+          const troopAtk = (DATA.state.TERRAIN[terrainKey][col] !== undefined) ? DATA.state.TERRAIN[terrainKey][col] : 1.0;
+          const rps = troopRPS(u, target);
+          const siege = (FORTIFIED[terrainKey] && DATA.state.TROOPS[u.g.troop].siegeBonus > 1) ? DATA.state.TROOPS[u.g.troop].siegeBonus : 1;
+          const sudden = round >= CFG.suddenDeathFrom ? (1 + (round - CFG.suddenDeathFrom) * CFG.suddenDeathRamp) : 1;
+          const atkMul = u.formation.atk * suitCoef(u.g.suit) * env.atk * troopAtk * rps * siege
+            * sCoef * (u.morale / 80) * (isAttackerSide ? choke : 1) * (u.isAmbush && round === 1 ? 1.5 : 1) * sudden * u.atkMul
+            * (1 - (u.foeHitDown || 0));
+          const K = 150;
+          const DAMAGE_SCALE = 4.0;
+          const effDef = target.defStat * env.def * target.defMul;
+          const mitigation = effDef / (effDef + K);
+          const dmg = Math.max(1, Math.round(u.primary * atkMul * (1 - mitigation) * DAMAGE_SCALE * CFG.dmgBase));
+          target.soldiers -= dmg;
+          log.push(`${u.g.name}(${u.g.troop}·${u.isBlade ? '兵刃' : '谋略'}) → ${target.g.name}(${target.g.troop}) 伤 ${dmg}${rps > 1 ? ' 克制↑' : (rps < 1 ? ' 被克↓' : '')}（剩${Math.max(0, target.soldiers)}）`);
+          if (target.soldiers <= 0) { target.alive = false; target.soldiers = 0; log.push(`  ☠ ${target.g.name} 败退`); }
+        }
+
+        // 主动战法
+        if (u.ctrl !== 'silence') {
+          for (const sk of u.skills) {
+            if (sk.type !== '主动') continue;
+            if ((u.skillCd[sk.id] || 0) > 0) continue;
+            const rate = SKILLS.fireRate(sk, u);
+            if (Math.random() * 100 < rate) {
+              SKILLS.cast(sk, u, allies, foes, env, log);
+              u.skillCd[sk.id] = (sk.cd || 0) + 1;
+            } else {
+              log.push(`  · ${u.g.name}【${sk.name}】未发动(${rate}%)`);
+            }
+          }
+        }
+
+        // 回合末：持续伤 + 控制倒计时 + 冷却递减
+        SKILLS.tick(u, log);
+        for (const k in u.skillCd) if (u.skillCd[k] > 0) u.skillCd[k]--;
       }
       if (ctx.floodActive) {
         defender.forEach(u => { if (u.alive) { const d = Math.round(300 * env.flood); u.soldiers -= d; if (u.soldiers <= 0) { u.alive = false; u.soldiers = 0; log.push(`  🌊 ${u.g.name} 被水淹败退`); } } });
       }
       squadMoraleContagion(allUnits());
-      allUnits().forEach(u => { if (u.alive) u.morale = clamp(u.morale - (u.soldiers / u.max < 0.5 ? 5 : 0) + env.morale * 0.1, 20, 100); });
+      allUnits().forEach(u => { if (u.alive) u.morale = clamp(u.morale - (u.soldiers / u.max < 0.5 ? 5 : 0) + env.morale * 0.1 + (u.regenMorale || 0) * 4, 20, 100); });
     }
     const attWin = defender.every(u => !u.alive);
     const defWin = attacker.every(u => !u.alive);
@@ -170,8 +237,9 @@
       const dLeft = defender.reduce((s, u) => s + u.soldiers, 0);
       result = aLeft >= dLeft ? '攻方胜(兵力占优)' : '守方胜(兵力占优)';
     }
-    return { result, round, log, attackers: attacker.map(u => ({ name: u.g.name, soldiers: u.soldiers, alive: u.alive })),
-             defenders: defender.map(u => ({ name: u.g.name, soldiers: u.soldiers, alive: u.alive })) };
+    return { result, round, log,
+      attackers: attacker.map(u => ({ name: u.g.name, soldiers: u.soldiers, alive: u.alive, skills: u.skills.map(s => s.name) })),
+      defenders: defender.map(u => ({ name: u.g.name, soldiers: u.soldiers, alive: u.alive, skills: u.skills.map(s => s.name) })) };
   }
 
   /* ---------- 水攻持续 ---------- */
@@ -199,7 +267,7 @@
   }
 
   return {
-    SUIT, STYLE_RPS, COMBAT_CFG, suitCoef,
+    SUIT, STYLE_RPS, COMBAT_CFG, FORTIFIED, suitCoef, troopRPS,
     environmentModifiers, chokePenalty, waterAttack, emptyFort, ambushDetect,
     makeUnit, miaoSuan, styleCoef, simulateCombat,
     squadMoraleContagion, floodDuration, startFlood, tickFlood, chooseFormation

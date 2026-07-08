@@ -1,0 +1,5 @@
+id,name,members,atkPct,rate,desc
+taoyuan,桃园结义,liu1;guan1;zhang1,0.10,0.08,刘关张同阵，义薄云天全军逞威
+wuhu,五虎上将,guan1;zhang1;zhao1;huang1,0.06,0.05,五虎之勇，陷阵无前
+dongwu,东吴都督,zhou1;lu1,0.08,0.06,周瑜陆逊火攻联动，烈焰焚敌
+weiwu,魏武雄略,cao1;sima1,0.07,0.05,曹操司马同朝，权谋并施

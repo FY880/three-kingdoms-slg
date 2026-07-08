@@ -12,8 +12,8 @@ const fs = require('fs');
 const path = require('path');
 const ROOT = path.join(__dirname, '..');
 
-const SRC_FILES = ['util.js', 'data.js', 'combat.js', 'diplomacy.js', 'scenario.js', 'rules.js'];
-const CSV_FILES = ['terrain.csv', 'weather.csv', 'season.csv', 'formations.csv', 'generals.csv'];
+const SRC_FILES = ['util.js', 'data.js', 'skills.js', 'combat.js', 'diplomacy.js', 'scenario.js', 'economy.js', 'rules.js'];
+const CSV_FILES = ['terrain.csv', 'weather.csv', 'season.csv', 'formations.csv', 'generals.csv', 'skills.csv', 'troops.csv', 'factions.csv', 'bonds.csv'];
 
 const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 
