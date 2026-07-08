@@ -39,7 +39,9 @@
     };
   }
   function chokePenalty(terrainKey) {
-    return DATA.state.TERRAIN[terrainKey] && DATA.state.TERRAIN[terrainKey].choke ? 0.6 : 1.0;
+    const t = DATA.state.TERRAIN[terrainKey];
+    if (!t || !t.choke) return 1.0;
+    return Math.max(0.5, 1 - 0.22 * t.choke);   // 天险依 CSV.choke 决定攻方受罚强度（数据驱动）
   }
 
   /* ---------- 兵书指令（诡道）---------- */
@@ -142,7 +144,8 @@
                      * sCoef * (u.morale / 80) * (isAttackerSide ? choke : 1) * (u.isAmbush && round === 1 ? 1.5 : 1) * sudden;
         const K = 150;
         const DAMAGE_SCALE = 4.0;
-        const mitigation = target.defStat / (target.defStat + K);
+        const effDef = target.defStat * env.def;   // 地形防御加成：高城防/山地降低守军承伤（数据驱动）
+        const mitigation = effDef / (effDef + K);
         const dmg = Math.max(1, Math.round(u.primary * atkMul * (1 - mitigation) * DAMAGE_SCALE * CFG.dmgBase));
         target.soldiers -= dmg;
         log.push(`${u.g.name}(${u.isBlade ? '兵刃' : '谋略'}) → ${target.g.name} 造成 ${dmg} 伤害（剩${Math.max(0, target.soldiers)}）`);
