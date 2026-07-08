@@ -27,7 +27,13 @@ function makeEl(id){
     closest(){ return null; }, dataset:{}
   };
 }
-const ctxStub = new Proxy({}, { get:()=>(()=>{}) });
+// 自返回 Proxy：任何属性读取/调用都返回自身（调用结果也是自身），
+// 因此 createRadialGradient().addColorStop() 等链式调用不会崩溃，适合无头冒烟测试。
+const ctxStub = new Proxy(function(){}, {
+  get(t,p){ return (p==='canvas') ? {width:800,height:600} : ctxStub; },
+  set(){ return true; },
+  apply(){ return ctxStub; }
+});
 const registry = {};
 const documentStub = {
   getElementById(id){ return registry[id] || (registry[id]=makeEl(id)); },
@@ -183,6 +189,51 @@ try {
   for (let i = 0; i < 12; i++) { get('btnTime').onclick(); } // 推进时辰，覆盖雨/雪/雾/风/旱各天气分支
 } catch (e) { renderErr = e; }
 assert(!renderErr, '多种天气下 render() 持续绘制无异常' + (renderErr ? '：' + renderErr.message : ''));
+
+// ---- 11. 针对克制选阵法（规则层）----
+assert(rules.chooseFormation(rules.GENERALS[0], rules.GENERALS[3], 'defile') === 'fengshi', '对高城防/天险优先选锋矢爆发');
+assert(typeof rules.chooseFormation(rules.GENERALS[0], rules.GENERALS[3], 'plain') === 'string', 'chooseFormation 返回合法阵法键');
+
+// ---- 12. 外交深度：附庸关系（互不攻）----
+sandbox.startScenario('melee');
+sandbox.playerSetRel('ai_liu', 'vassal');
+st = sandbox.getState();
+assert(rules.isVassal(st.DIP, 'ai_liu', 'player'), '附庸：ai_liu 臣服于玩家');
+assert(rules.canAttack(st.DIP, 'player', 'ai_liu') === false, '附庸：玩家不可攻附庸');
+
+// ---- 13. 外交深度：议和（信誉影响，结果合法）----
+sandbox.startScenario('melee');
+sandbox.playerSetRel('ai_dong', 'war');
+let peaceErr = null, peaceRel = null;
+try { const L = sandbox.getState().AI_LORDS.find(x=>x.id==='ai_dong'); sandbox.playerSuePeace(L); peaceRel = rules.getRelation(sandbox.getState().DIP,'player','ai_dong'); }
+catch(e){ peaceErr = e; }
+assert(!peaceErr, '议和无异常' + (peaceErr?'：'+peaceErr.message:''));
+assert(peaceRel==='rival' || peaceRel==='neutral', '议和后关系合法（接受=中立 / 拒绝=敌对）: '+peaceRel);
+
+// ---- 14. 剧本事件：auto-coalition（allyAll 自动结盟讨贼）----
+sandbox.startScenario('melee');
+sandbox.applyEvent({type:'allyAll', target:'ai_dong', msg:'同盟讨贼'});
+st = sandbox.getState();
+assert(rules.isAlly(st.DIP,'ai_cao','ai_liu'), 'allyAll：各诸侯互相结盟');
+assert(rules.isRival(st.DIP,'ai_cao','ai_dong'), 'allyAll：联盟共同敌对目标');
+
+// ---- 15. 水攻持续回合：每回合 floodTurns 递减 ----
+sandbox.startScenario('melee');
+st = sandbox.getState();
+let ft=null;
+for (let y=0;y<56&&!ft;y++) for (let x=0;x<80;x++){ const c=st.map[y][x]; if(c.owner!=='player'&&c.t!=='river'){ ft=c; break; } }
+ft.floodTurns=3; const ftBefore=ft.floodTurns;
+sandbox.aiTurn();
+assert(ft.floodTurns === ftBefore-1, '水攻持续：每回合 floodTurns 递减 ('+ftBefore+'→'+ft.floodTurns+')');
+
+// ---- 16. AI 智商：多线铺路/被夹击求援，长回合稳定不崩且持续扩张 ----
+sandbox.startScenario('melee');
+let aiErr=null, aiBefore=0, aiAfter=0;
+const m0=sandbox.getState().map; for(let y=0;y<56;y++)for(let x=0;x<80;x++){ if((''+m0[y][x].owner).startsWith('ai_')) aiBefore++; }
+try { for (let i=0;i<10;i++) sandbox.aiTurn(); } catch(e){ aiErr=e; }
+const m1=sandbox.getState().map; for(let y=0;y<56;y++)for(let x=0;x<80;x++){ if((''+m1[y][x].owner).startsWith('ai_')) aiAfter++; }
+assert(!aiErr, 'AI 多回合行动无异常' + (aiErr?'：'+aiErr.message:''));
+assert(aiAfter >= aiBefore, 'AI 持续向中立/玩家扩张，AI 所占格数不减 ('+aiBefore+'→'+aiAfter+')');
 
 console.log('\n=== 冒烟测试完成 ===');
 }
