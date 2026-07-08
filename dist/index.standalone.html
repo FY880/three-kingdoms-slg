@@ -59,6 +59,18 @@
   /* 目标横幅 */
   #objBar{ display:flex; align-items:center; gap:6px; padding:4px 10px; background:#1b2230; font-size:12.5px; color:#cfe0ff; line-height:1.3; }
   #objBar b{ color:#ffd479; }
+  /* 资源条 */
+  #resBar{ display:flex; align-items:center; gap:12px; padding:4px 10px; background:#12161d; font-size:12px; color:#dfe6ee; overflow-x:auto; border-top:1px solid #232a34; }
+  #resBar .res{ display:flex; align-items:center; gap:3px; white-space:nowrap; }
+  #resBar .res b{ color:#fff; }
+  #resBar .res span{ opacity:.85; }
+  /* 出征预览：战法/兵种 */
+  .roster{ margin-top:8px; font-size:12.5px; line-height:1.7; }
+  .roster .unit{ display:inline-flex; align-items:center; gap:5px; margin:2px 8px 2px 0; padding:2px 7px; background:#232a34; border-radius:6px; }
+  .roster .unit b{ color:#ffd479; }
+  .roster .unit .tr{ color:#9ec5ff; font-size:11px; }
+  .roster .unit .sk{ display:inline-flex; align-items:baseline; gap:1px; color:#7CFC8A; font-style:normal; font-size:11px; }
+  .roster .unit .sk small{ color:#888; font-size:9px; }
   /* 缩放按钮 */
   #zoomBar{ position:absolute; right:8px; top:8px; display:flex; flex-direction:column; gap:8px; z-index:14; }
   #zoomBar button{ width:42px; height:42px; font-size:22px; line-height:1; border:none; border-radius:10px; background:rgba(35,40,47,.82); color:#fff; }
@@ -83,6 +95,7 @@
     <span class="tag" id="tEnemy">敌0</span>
   </div>
   <div id="objBar">🎯 目标加载中…</div>
+  <div id="resBar"></div>
   <div id="mapWrap"><canvas id="cv"></canvas><div id="zoomBar"><button id="btnZoomIn">＋</button><button id="btnZoomOut">－</button></div></div>
   <div id="bottombar">
     <button id="btnTime">推进时辰</button>
@@ -92,6 +105,7 @@
     <button id="btnScenario" class="alt">剧本</button>
     <button id="btnReload" class="alt">配表</button>
     <button id="btnReset" class="alt">重置</button>
+    <button id="btnRecruit" class="alt">征兵</button>
   </div>
 </div>
 <div id="sheet">
@@ -177,11 +191,11 @@
       swamp:{name:'沼泽',move:0.5,atk:0.95,def:0.95,cav:0.6,inf:0.9,arch:0.9,eng:0.7,scout:0.9,ambush:0.1,flood:0.2,choke:0,marchDmg:0.06,color:'#a8b18c'},
       river:{name:'河流',move:0.1,atk:1.0,def:1.0,cav:0.5,inf:0.8,arch:1.0,eng:1.2,scout:0.6,ambush:0,flood:1,choke:0,marchDmg:0,color:'#7fb6d6'},
       lowland:{name:'低洼盆地',move:0.9,atk:0.95,def:0.85,cav:1.0,inf:0.95,arch:1.0,eng:0.9,scout:1.0,ambush:0,flood:0.6,choke:0,marchDmg:0,color:'#c9d8a0'},
-      defile:{name:'峡谷隘口',move:0.6,atk:0.9,def:1.35,cav:0.7,inf:1.1,arch:1.0,eng:0.8,scout:0.8,ambush:0.35,flood:0,choke:1,marchDmg:0,color:'#8c9a6e'},
-      city:{name:'城池关隘',move:1.0,atk:1.0,def:1.5,cav:0.9,inf:1.1,arch:1.0,eng:1.3,scout:0.9,ambush:0.05,flood:0,choke:1,marchDmg:0,color:'#d8c98c'},
+      defile:{name:'峡谷隘口',move:0.6,atk:0.9,def:1.18,cav:0.7,inf:1.1,arch:1.0,eng:0.8,scout:0.8,ambush:0.35,flood:0,choke:1,marchDmg:0,color:'#8c9a6e'},
+      city:{name:'城池关隘',move:1.0,atk:1.0,def:1.12,cav:0.9,inf:1.1,arch:1.0,eng:1.3,scout:0.9,ambush:0.05,flood:0,choke:1,marchDmg:0,color:'#d8c98c'},
       desert:{name:'荒漠戈壁',move:0.7,atk:1.0,def:1.0,cav:1.0,inf:0.9,arch:1.0,eng:0.8,scout:1.1,ambush:0,flood:0,choke:0,marchDmg:0.04,color:'#e3d6a0'},
       tundra:{name:'雪原冰原',move:0.6,atk:1.0,def:1.05,cav:0.8,inf:1.0,arch:0.95,eng:0.8,scout:0.9,ambush:0.1,flood:0,choke:0,marchDmg:0.03,color:'#dfe7ee'},
-      bridge:{name:'桥梁栈道',move:1.0,atk:1.0,def:1.0,cav:0.9,inf:1.0,arch:1.0,eng:1.0,scout:1.0,ambush:0,flood:0,choke:1,marchDmg:0,color:'#c2b08a'}
+      bridge:{name:'桥梁栈道',move:1.0,atk:1.0,def:1.0,cav:0.9,inf:1.0,arch:1.0,eng:1.0,scout:1.0,ambush:0,flood:0,choke:0.7,marchDmg:0,color:'#c2b08a'}
     },
     WEATHER: {
       sun:{name:'晴',move:1.0,atk:1.0,def:1.0,fire:1.0,cav:1.0,scout:1.0,flood:0.0,morale:0},
@@ -206,19 +220,56 @@
       yulin:{name:'鱼鳞',atk:0.95,def:1.2,morale:1.05,flank:0.95,reqInt:0}
     },
     GENERALS: [
-      {id:'cao1',name:'曹操',star:5,force:92,intellect:89,leadership:96,speed:78,style:'鹰扬',trait:'多疑',troop:'骑',suit:'S',skill:'奸雄',skillDesc:'每回合概率提升全军攻击并降低敌方防御'},
-      {id:'liu1',name:'刘备',star:5,force:75,intellect:82,leadership:90,speed:70,style:'持重',trait:'仁德',troop:'步',suit:'S',skill:'仁德',skillDesc:'提升全军士气与伤兵恢复'},
-      {id:'sun1',name:'孙权',star:4,force:78,intellect:84,leadership:88,speed:76,style:'奇变',trait:'沉稳',troop:'弓',suit:'A',skill:'制衡',skillDesc:'概率使敌方主动战法失效并反弹'},
-      {id:'guan1',name:'关羽',star:5,force:97,intellect:75,leadership:95,speed:80,style:'鹰扬',trait:'刚烈',troop:'步',suit:'S',skill:'威震华夏',skillDesc:'对兵力最高敌军造成巨额兵刃伤害并震慑'},
-      {id:'zhang1',name:'张飞',star:5,force:98,intellect:52,leadership:92,speed:85,style:'鹰扬',trait:'短虑',troop:'步',suit:'A',skill:'咆哮',skillDesc:'高概率混乱敌军前排'},
-      {id:'zhao1',name:'赵云',star:5,force:96,intellect:76,leadership:93,speed:95,style:'鹰扬',trait:'沉稳',troop:'骑',suit:'S',skill:'龙胆',skillDesc:'突击多次且免疫首次控制'},
-      {id:'zhu1',name:'诸葛亮',star:5,force:55,intellect:100,leadership:85,speed:72,style:'奇变',trait:'多疑',troop:'步',suit:'S',skill:'空城',skillDesc:'残血时大幅提升防御并使敌方命中下降'},
-      {id:'zhou1',name:'周瑜',star:5,force:72,intellect:96,leadership:90,speed:83,style:'奇变',trait:'傲岸',troop:'弓',suit:'S',skill:'火攻',skillDesc:'火系伤害翻倍并点燃地形'},
-      {id:'sima1',name:'司马懿',star:5,force:68,intellect:97,leadership:91,speed:74,style:'持重',trait:'隐忍',troop:'步',suit:'S',skill:'鹰视',skillDesc:'持续偷取敌军属性并削弱'},
-      {id:'lv1',name:'吕布',star:5,force:100,intellect:35,leadership:85,speed:98,style:'鹰扬',trait:'短虑',troop:'骑',suit:'S',skill:'无双',skillDesc:'极高兵刃爆发，但易被混乱'},
-      {id:'huang1',name:'黄忠',star:4,force:94,intellect:62,leadership:88,speed:79,style:'持重',trait:'老当益壮',troop:'弓',suit:'S',skill:'百步',skillDesc:'远程暴击并破防'},
-      {id:'lu1',name:'陆逊',star:5,force:70,intellect:95,leadership:89,speed:80,style:'奇变',trait:'沉稳',troop:'弓',suit:'S',skill:'火烧连营',skillDesc:'火攻蔓延且施加灼烧'}
-    ]
+      {id:'cao1',name:'曹操',star:5,force:92,intellect:89,leadership:96,speed:78,style:'鹰扬',trait:'多疑',troop:'骑',suit:'S',skill:'奸雄',skillDesc:'每回合概率提升全军攻击并降低敌方防御',faction:'魏',skills:['jianxiong'],level:5},
+      {id:'liu1',name:'刘备',star:5,force:82,intellect:96,leadership:93,speed:72,style:'持重',trait:'仁德',troop:'步',suit:'S',skill:'仁德',skillDesc:'提升全军士气与伤兵恢复速度',faction:'蜀',skills:['rende'],level:5},
+      {id:'sun1',name:'孙权',star:4,force:84,intellect:92,leadership:92,speed:76,style:'奇变',trait:'沉稳',troop:'弓',suit:'S',skill:'制衡',skillDesc:'概率使敌方主动战法失效并反弹',faction:'吴',skills:['zhizhi'],level:4},
+      {id:'guan1',name:'关羽',star:5,force:97,intellect:75,leadership:95,speed:80,style:'鹰扬',trait:'刚烈',troop:'步',suit:'S',skill:'威震华夏',skillDesc:'对兵力最高敌军造成巨额兵刃伤害并震慑',faction:'蜀',skills:['weizhen'],level:5},
+      {id:'zhang1',name:'张飞',star:5,force:98,intellect:52,leadership:92,speed:85,style:'鹰扬',trait:'短虑',troop:'步',suit:'A',skill:'咆哮',skillDesc:'高概率混乱敌军前排，自身易中控',faction:'蜀',skills:['paoxiao'],level:5},
+      {id:'zhao1',name:'赵云',star:5,force:96,intellect:76,leadership:93,speed:95,style:'鹰扬',trait:'沉稳',troop:'骑',suit:'S',skill:'龙胆',skillDesc:'突击多次且免疫首次控制',faction:'蜀',skills:['longdan'],level:5},
+      {id:'zhu1',name:'诸葛亮',star:5,force:55,intellect:100,leadership:85,speed:72,style:'奇变',trait:'多疑',troop:'步',suit:'S',skill:'空城',skillDesc:'残血时大幅提升防御并使敌方命中下降（空城计）',faction:'蜀',skills:['kongcheng'],level:5},
+      {id:'zhou1',name:'周瑜',star:5,force:72,intellect:93,leadership:90,speed:83,style:'奇变',trait:'傲岸',troop:'弓',suit:'S',skill:'火攻',skillDesc:'火系伤害翻倍并点燃地形',faction:'吴',skills:['huogong'],level:5},
+      {id:'sima1',name:'司马懿',star:5,force:68,intellect:97,leadership:91,speed:74,style:'持重',trait:'隐忍',troop:'步',suit:'S',skill:'鹰视',skillDesc:'持续偷取敌军属性并削弱',faction:'魏',skills:['yingshi'],level:5},
+      {id:'lv1',name:'吕布',star:5,force:100,intellect:35,leadership:85,speed:98,style:'鹰扬',trait:'短虑',troop:'骑',suit:'S',skill:'无双',skillDesc:'极高兵刃爆发，但自身易被混乱',faction:'群',skills:['wushuang'],level:5},
+      {id:'huang1',name:'黄忠',star:4,force:94,intellect:62,leadership:88,speed:79,style:'持重',trait:'老当益壮',troop:'弓',suit:'S',skill:'百步',skillDesc:'远程暴击并破防',faction:'蜀',skills:['baibu'],level:4},
+      {id:'lu1',name:'陆逊',star:5,force:70,intellect:95,leadership:89,speed:80,style:'奇变',trait:'沉稳',troop:'弓',suit:'S',skill:'火烧连营',skillDesc:'火攻蔓延且施加灼烧',faction:'吴',skills:['shaolian'],level:5}
+    ],
+    /* —— 战法（主动/被动/指挥/追击） —— */
+    SKILLS: {
+      jianxiong:{id:'jianxiong',name:'奸雄',type:'指挥',school:'谋略',target:'ally_all',prep:0,cd:0,rate:100,dmgPct:0,healPct:0,buffAtkPct:0.10,buffDefPct:0.05,buffMorale:0,debuffAtkPct:0,debuffDefPct:0,ctrl:'',ctrlChance:0,dotPct:0,dotSchool:'',stealPct:0,reflect:0,immuneCtrl:0,duration:10,desc:'每回合提升全军攻击并降低敌方防御'},
+      rende:{id:'rende',name:'仁德',type:'被动',school:'谋略',target:'ally_all',prep:0,cd:0,rate:100,dmgPct:0,healPct:0.06,buffAtkPct:0,buffDefPct:0,buffMorale:0.05,debuffAtkPct:0,debuffDefPct:0,ctrl:'',ctrlChance:0,dotPct:0,dotSchool:'',stealPct:0,reflect:0,immuneCtrl:0,duration:10,desc:'提升全军士气与伤兵恢复速度'},
+      zhizhi:{id:'zhizhi',name:'制衡',type:'主动',school:'谋略',target:'foe_all',prep:0,cd:2,rate:45,dmgPct:0,healPct:0,buffAtkPct:0,buffDefPct:0,buffMorale:0,debuffAtkPct:-0.10,debuffDefPct:0,ctrl:'silence',ctrlChance:0.50,dotPct:0,dotSchool:'',stealPct:0,reflect:1,immuneCtrl:0,duration:1,desc:'概率使敌方主动战法失效并反弹'},
+      weizhen:{id:'weizhen',name:'威震华夏',type:'主动',school:'兵刃',target:'foe_top',prep:0,cd:2,rate:40,dmgPct:1.20,dmgSchool:'兵刃',healPct:0,buffAtkPct:0,buffDefPct:0,buffMorale:0,debuffAtkPct:0,debuffDefPct:-0.15,ctrl:'shock',ctrlChance:0.60,dotPct:0,dotSchool:'',stealPct:0,reflect:0,immuneCtrl:0,duration:2,desc:'对兵力最高敌军造成巨额兵刃伤害并震慑'},
+      paoxiao:{id:'paoxiao',name:'咆哮',type:'主动',school:'兵刃',target:'foe_front',prep:0,cd:2,rate:50,dmgPct:0.45,dmgSchool:'兵刃',healPct:0,buffAtkPct:0,buffDefPct:0,buffMorale:0,debuffAtkPct:0,debuffDefPct:-0.10,ctrl:'confuse',ctrlChance:0.55,dotPct:0,dotSchool:'',stealPct:0,reflect:0,immuneCtrl:0,duration:1,desc:'高概率混乱敌军前排，自身易中控'},
+      longdan:{id:'longdan',name:'龙胆',type:'主动',school:'兵刃',target:'foe_top',prep:0,cd:2,rate:55,dmgPct:1.00,dmgSchool:'兵刃',healPct:0,buffAtkPct:0,buffDefPct:0,buffMorale:0,debuffAtkPct:0,debuffDefPct:-0.10,ctrl:'',ctrlChance:0,dotPct:0,dotSchool:'',stealPct:0,reflect:0,immuneCtrl:1,duration:2,desc:'突击多次且免疫首次控制'},
+      kongcheng:{id:'kongcheng',name:'空城',type:'被动',school:'谋略',target:'self',prep:0,cd:0,rate:100,dmgPct:0,healPct:0,buffAtkPct:0,buffDefPct:0.25,buffMorale:0,debuffAtkPct:0.10,debuffDefPct:0,ctrl:'',ctrlChance:0,dotPct:0,dotSchool:'',stealPct:0,reflect:0,immuneCtrl:1,duration:10,desc:'残血时大幅提升防御并使敌方命中下降'},
+      huogong:{id:'huogong',name:'火攻',type:'主动',school:'谋略',target:'foe_all',prep:0,cd:2,rate:45,dmgPct:0.80,dmgSchool:'谋略',healPct:0,buffAtkPct:0,buffDefPct:0,buffMorale:0,debuffAtkPct:0,debuffDefPct:-0.08,ctrl:'',ctrlChance:0,dotPct:0.12,dotSchool:'fire',stealPct:0,reflect:0,immuneCtrl:0,duration:2,desc:'火系伤害翻倍并点燃地形施加灼烧'},
+      yingshi:{id:'yingshi',name:'鹰视',type:'主动',school:'谋略',target:'foe_all',prep:0,cd:2,rate:45,dmgPct:0,healPct:0,buffAtkPct:0,buffDefPct:0,buffMorale:0,debuffAtkPct:0,debuffDefPct:-0.12,ctrl:'shock',ctrlChance:0.40,dotPct:0,dotSchool:'',stealPct:0.12,reflect:0,immuneCtrl:0,duration:2,desc:'持续偷取敌军属性并削弱'},
+      wushuang:{id:'wushuang',name:'无双',type:'主动',school:'兵刃',target:'foe_top',prep:0,cd:2,rate:50,dmgPct:1.50,dmgSchool:'兵刃',healPct:0,buffAtkPct:0,buffDefPct:0,buffMorale:0,debuffAtkPct:0,debuffDefPct:-0.12,ctrl:'',ctrlChance:0,dotPct:0,dotSchool:'',stealPct:0,reflect:0,immuneCtrl:0,duration:0,desc:'极高兵刃爆发，但自身易被混乱'},
+      baibu:{id:'baibu',name:'百步',type:'主动',school:'兵刃',target:'foe_top',prep:0,cd:2,rate:50,dmgPct:1.10,dmgSchool:'兵刃',healPct:0,buffAtkPct:0,buffDefPct:0,buffMorale:0,debuffAtkPct:0,debuffDefPct:-0.20,ctrl:'',ctrlChance:0,dotPct:0,dotSchool:'',stealPct:0,reflect:0,immuneCtrl:0,duration:2,desc:'远程暴击并破防'},
+      shaolian:{id:'shaolian',name:'火烧连营',type:'主动',school:'谋略',target:'foe_all',prep:0,cd:2,rate:45,dmgPct:0.70,dmgSchool:'谋略',healPct:0,buffAtkPct:0,buffDefPct:0,buffMorale:0,debuffAtkPct:0,debuffDefPct:-0.06,ctrl:'',ctrlChance:0,dotPct:0.15,dotSchool:'fire',stealPct:0,reflect:0,immuneCtrl:0,duration:3,desc:'火攻蔓延且施加灼烧'}
+    },
+    /* —— 兵种克制 + 地形适性 —— */
+    TROOPS: {
+      步:{name:'步兵',beat:'弓',fieldCol:'inf',siegeBonus:1.0},
+      骑:{name:'骑兵',beat:'步',fieldCol:'cav',siegeBonus:1.0},
+      弓:{name:'弓兵',beat:'骑',fieldCol:'arch',siegeBonus:1.0},
+      车:{name:'车兵',beat:'',fieldCol:'eng',siegeBonus:1.3},
+      械:{name:'器械',beat:'',fieldCol:'eng',siegeBonus:1.6}
+    },
+    /* —— 阵营羁绊 —— */
+    FACTIONS: {
+      魏:{name:'魏',bondAtkPct:0.08,bondDefPct:0.05,bondRate:0.05},
+      蜀:{name:'蜀',bondAtkPct:0.08,bondDefPct:0.05,bondRate:0.05},
+      吴:{name:'吴',bondAtkPct:0.08,bondDefPct:0.05,bondRate:0.05},
+      群:{name:'群',bondAtkPct:0.06,bondDefPct:0.04,bondRate:0.04}
+    },
+    /* —— 武将缘分 —— */
+    BONDS: {
+      taoyuan:{name:'桃园结义',members:['liu1','guan1','zhang1'],atkPct:0.10,rate:0.08},
+      wuhu:{name:'五虎上将',members:['guan1','zhang1','zhao1','huang1'],atkPct:0.06,rate:0.05},
+      dongwu:{name:'东吴都督',members:['zhou1','lu1'],atkPct:0.08,rate:0.06},
+      weiwu:{name:'魏武雄略',members:['cao1','sima1'],atkPct:0.07,rate:0.05}
+    }
   };
 
   // 可变 state：热加载时只重赋值属性，不换对象 → 所有引用保持有效
@@ -227,7 +278,11 @@
     WEATHER:   DEFAULTS.WEATHER,
     SEASON:    DEFAULTS.SEASON,
     FORMATIONS:DEFAULTS.FORMATIONS,
-    GENERALS:  DEFAULTS.GENERALS
+    GENERALS:  DEFAULTS.GENERALS,
+    SKILLS:    DEFAULTS.SKILLS,
+    TROOPS:    DEFAULTS.TROOPS,
+    FACTIONS:  DEFAULTS.FACTIONS,
+    BONDS:     DEFAULTS.BONDS
   };
 
   /* ---------- CSV 解析 / 转换 ---------- */
@@ -244,7 +299,15 @@
   function toWeather(rows){ const o={}; rows.forEach(r=>{ o[r.key]={name:r.name,move:num(r.move,1),atk:num(r.atk,1),def:num(r.def,1),fire:num(r.fire,1),cav:num(r.cav,1),scout:num(r.scout,1),flood:num(r.flood,0),morale:num(r.morale,0)}; }); return o; }
   function toSeason(rows){ const o={}; rows.forEach(r=>{ o[r.key]={name:r.name,grain:num(r.grain,1),w:{rain:num(r.rain,1),sun:num(r.sun,1),fog:num(r.fog,1),snow:num(r.snow,1),wind:num(r.wind,1),drought:num(r.drought,1)}}; }); return o; }
   function toFormations(rows){ const o={}; rows.forEach(r=>{ o[r.key]={name:r.name,atk:num(r.atk,1),def:num(r.def,1),morale:num(r.morale,1),flank:num(r.flank,1),reqInt:num(r.reqInt,0)}; }); return o; }
-  function toGenerals(rows){ return rows.map(r=>({id:r.id,name:r.name,star:num(r.star,4),force:num(r.force,80),intellect:num(r.intellect,80),leadership:num(r.leadership,80),speed:num(r.speed,70),style:r.style,trait:r.trait,troop:r.troop,suit:r.suit,skill:r.skill,skillDesc:r.skillDesc})); }
+  function toGenerals(rows){ return rows.map(r=>({id:r.id,name:r.name,star:num(r.star,4),force:num(r.force,80),intellect:num(r.intellect,80),leadership:num(r.leadership,80),speed:num(r.speed,70),style:r.style,trait:r.trait,troop:r.troop,suit:r.suit,skill:r.skill,skillDesc:r.skillDesc,
+    faction:r.faction||'群', skills:(r.skills? r.skills.split(/[;,]/).map(s=>s.trim()).filter(Boolean):[]), level:num(r.level,1)})); }
+  function toSkills(rows){ const o={}; rows.forEach(r=>{ o[r.id]={id:r.id,name:r.name,type:r.type,school:r.school,target:r.target,prep:num(r.prep,0),cd:num(r.cd,0),rate:num(r.rate,0),
+    dmgPct:num(r.dmgPct,0),dmgSchool:r.dmgSchool||'兵刃',healPct:num(r.healPct,0),buffAtkPct:num(r.buffAtkPct,0),buffDefPct:num(r.buffDefPct,0),buffMorale:num(r.buffMorale,0),
+    debuffAtkPct:num(r.debuffAtkPct,0),debuffDefPct:num(r.debuffDefPct,0),ctrl:r.ctrl||'',ctrlChance:num(r.ctrlChance,0),dotPct:num(r.dotPct,0),dotSchool:r.dotSchool||'',
+    stealPct:num(r.stealPct,0),reflect:num(r.reflect,0),immuneCtrl:num(r.immuneCtrl,0),duration:num(r.duration,0),desc:r.desc}; }); return o; }
+  function toTroops(rows){ const o={}; rows.forEach(r=>{ o[r.id]={name:r.name,beat:r.beat||'',fieldCol:r.fieldCol||'inf',siegeBonus:num(r.siegeBonus,1)}; }); return o; }
+  function toFactions(rows){ const o={}; rows.forEach(r=>{ o[r.id]={name:r.name,bondAtkPct:num(r.bondAtkPct,0),bondDefPct:num(r.bondDefPct,0),bondRate:num(r.bondRate,0)}; }); return o; }
+  function toBonds(rows){ const o={}; rows.forEach(r=>{ o[r.id]={name:r.name,members:(r.members? r.members.split(/[;]/).map(s=>s.trim()).filter(Boolean):[]),atkPct:num(r.atkPct,0),rate:num(r.rate,0),desc:r.desc}; }); return o; }
 
   // 用解析后的 CSV 覆盖内置数据（热加载）
   function reload(cfg) {
@@ -253,12 +316,17 @@
     if (cfg.season)    state.SEASON     = toSeason(cfg.season);
     if (cfg.formations)state.FORMATIONS = toFormations(cfg.formations);
     if (cfg.generals)  state.GENERALS   = toGenerals(cfg.generals);
+    if (cfg.skills)    state.SKILLS     = toSkills(cfg.skills);
+    if (cfg.troops)    state.TROOPS     = toTroops(cfg.troops);
+    if (cfg.factions)  state.FACTIONS   = toFactions(cfg.factions);
+    if (cfg.bonds)     state.BONDS      = toBonds(cfg.bonds);
     return true;
   }
   // 浏览器：从 data/ 拉取 CSV 并热加载（file:// 下 fetch 失败则 Demo 回退内置默认）
   async function loadConfigFromServer(base) {
     base = base || 'data/';
-    const files = {terrain:'terrain.csv',weather:'weather.csv',season:'season.csv',formations:'formations.csv',generals:'generals.csv'};
+    const files = {terrain:'terrain.csv',weather:'weather.csv',season:'season.csv',formations:'formations.csv',generals:'generals.csv',
+                   skills:'skills.csv',troops:'troops.csv',factions:'factions.csv',bonds:'bonds.csv'};
     const cfg = {};
     for (const k in files) { const res = await fetch(base + files[k]); if (!res.ok) throw new Error('缺少 ' + files[k]); cfg[k] = parseCSV(await res.text()); }
     reload(cfg); return cfg;
@@ -267,7 +335,8 @@
   function loadCSVFromDir(dir) {
     const fs = (typeof require !== 'undefined') ? require('fs') : null;
     if (!fs) throw new Error('loadCSVFromDir 仅 Node 环境可用');
-    const files = {terrain:'terrain.csv',weather:'weather.csv',season:'season.csv',formations:'formations.csv',generals:'generals.csv'};
+    const files = {terrain:'terrain.csv',weather:'weather.csv',season:'season.csv',formations:'formations.csv',generals:'generals.csv',
+                   skills:'skills.csv',troops:'troops.csv',factions:'factions.csv',bonds:'bonds.csv'};
     const cfg = {};
     for (const k in files) { cfg[k] = parseCSV(fs.readFileSync(dir + '/' + files[k], 'utf8')); }
     return reload(cfg);
@@ -278,26 +347,152 @@
 
 </script>
 <script>
+/* ===== src/skills.js ===== */
+/* ============================================================
+ *  skills.js —— 武将战法引擎（UMD）
+ *  依赖：data(state)。
+ *  战法四型：指挥(开场加成) / 被动(常驻) / 主动(行动时发动) / 追击(普攻后)。
+ *  本模块只负责「按战法定义结算效果」，单位状态字段由 combat.makeUnit 提供。
+ * ============================================================ */
+(function (global, factory) {
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = factory(require('./data.js'));
+  } else {
+    global.RULES_SKILLS = factory(global.RULES_DATA);
+  }
+})(typeof self !== 'undefined' ? self : this, function (DATA) {
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+  // 取武将的全部战法对象
+  function skillList(g) {
+    return (g.skills || []).map(id => DATA.state.SKILLS[id]).filter(Boolean);
+  }
+
+  // 发动率：基础 + 属性差 + 阵营羁绊加成
+  function fireRate(skill, caster) {
+    const stat = skill.school === '谋略' ? (caster.g.intellect || 0) : (caster.g.force || 0);
+    const base = skill.rate + (stat - 80) * 0.22 + (caster.bondRate || 0) * 100;
+    return clamp(Math.round(base), 25, 92);
+  }
+
+  // 选目标
+  function pickTargets(skill, caster, allies, foes) {
+    const alive = foes.filter(f => f.alive);
+    const aliveA = allies.filter(a => a.alive);
+    switch (skill.target) {
+      case 'ally_all': return aliveA;
+      case 'self':     return [caster];
+      case 'foe_all':  return alive;
+      case 'foe_top':  return alive.length ? [alive.reduce((m, x) => x.soldiers > m.soldiers ? x : m, alive[0])] : [];
+      case 'foe_front':return alive.length ? [alive[0]] : [];
+      default:         return alive;
+    }
+  }
+
+  // 开场：指挥战法加成 + 被动常驻标记
+  function commandSetup(unit, army, log) {
+    for (const sk of skillList(unit.g)) {
+      if (sk.type === '指挥') {
+        army.forEach(u => {
+          if (!u.alive) return;
+          if (sk.buffAtkPct) u.atkMul  *= (1 + sk.buffAtkPct);
+          if (sk.buffDefPct) u.defMul  *= (1 + sk.buffDefPct);
+          if (sk.buffMorale) u.morale   = clamp(u.morale + sk.buffMorale * 20, 20, 100);
+        });
+        log.push(`📜 ${unit.g.name} 施【${sk.name}】· 全军 ${sk.desc}`);
+      } else if (sk.type === '被动') {
+        if (sk.immuneCtrl) unit.immuneCtrl = true;
+        if (sk.buffDefPct) unit.defMul *= (1 + sk.buffDefPct);
+        if (sk.debuffAtkPct) army.forEach(en => en.alive && (en.foeHitDown = (en.foeHitDown || 0) + sk.debuffAtkPct));
+        if (sk.healPct) unit.regenPct = (unit.regenPct || 0) + sk.healPct;
+        if (sk.buffMorale) unit.regenMorale = (unit.regenMorale || 0) + sk.buffMorale;
+        log.push(`🛡 ${unit.g.name} 常驻【${sk.name}】· ${sk.desc}`);
+      }
+    }
+  }
+
+  function applyControl(target, sk, log) {
+    if (!sk.ctrl || !target.alive) return;
+    if (target.immuneCtrl && !target.immuneCtrlUsed) {
+      target.immuneCtrlUsed = true;
+      log.push(`  🔰 ${target.g.name} 免疫控制（${sk.name}）`);
+      return;
+    }
+    const name = { stun:'震慑不能动', confuse:'混乱', shock:'震慑', disarm:'缴械', silence:'沉默' }[sk.ctrl] || sk.ctrl;
+    target.ctrl = sk.ctrl;
+    target.ctrlTurns = Math.max(target.ctrlTurns || 0, sk.duration || 1);
+    log.push(`  🔒 ${target.g.name} 中【${sk.name}】→ ${name}`);
+  }
+
+  // 主动/追击战法结算
+  function cast(skill, caster, allies, foes, env, log) {
+    const targets = pickTargets(skill, caster, allies, foes);
+    if (!targets.length && skill.target.indexOf('foe') === 0) return;
+    if (skill.dmgPct) {
+      targets.forEach(t => {
+        if (!t.alive) return;
+        const mit = (t.defStat * 1) / (t.defStat + 150);
+        const dmg = Math.max(1, Math.round(caster.primary * skill.dmgPct * caster.atkMul * (1 - mit * 0.6)));
+        t.soldiers -= dmg; if (t.soldiers <= 0) { t.soldiers = 0; t.alive = false; }
+        log.push(`  💥 ${caster.g.name}【${skill.name}】→ ${t.g.name} ${skill.dmgSchool}伤害 ${dmg}` + (t.alive ? '' : '（败退）'));
+      });
+    }
+    if (skill.healPct) {
+      targets.forEach(t => { if (!t.alive) return; const h = Math.round((t.max - t.soldiers) * skill.healPct); t.soldiers = Math.min(t.max, t.soldiers + h); if (h > 0) log.push(`  💚 ${caster.g.name}【${skill.name}】疗${t.g.name} +${h}`); });
+    }
+    if (skill.buffAtkPct || skill.buffDefPct) {
+      targets.forEach(t => { if (!t.alive) return; if (skill.buffAtkPct) t.atkMul *= (1 + skill.buffAtkPct); if (skill.buffDefPct) t.defMul *= (1 + skill.buffDefPct); });
+      log.push(`  ✨ ${caster.g.name}【${skill.name}】增益全军`);
+    }
+    if (skill.debuffAtkPct || skill.debuffDefPct) {
+      targets.forEach(t => { if (!t.alive) return; if (skill.debuffAtkPct) t.atkMul *= (1 + skill.debuffAtkPct); if (skill.debuffDefPct) t.defMul *= (1 + skill.debuffDefPct); });
+      log.push(`  📉 ${caster.g.name}【${skill.name}】削敌`);
+    }
+    if (skill.ctrl) targets.forEach(t => applyControl(t, skill, log));
+    if (skill.dotPct) targets.forEach(t => { if (t.alive) t.dots.push({ pct: skill.dotPct, school: skill.dotSchool, turns: skill.duration || 2 }); });
+    if (skill.stealPct) targets.forEach(t => { if (!t.alive) return; t.atkMul *= (1 - skill.stealPct); caster.atkMul *= (1 + skill.stealPct); });
+    if (skill.reflect) { caster.reflectNext = true; log.push(`  🪞 ${caster.g.name}【${skill.name}】反弹就绪`); }
+  }
+
+  // 每回合持续：灼烧/中毒、控制倒计时
+  function tick(unit, log) {
+    if (!unit.alive) return;
+    unit.dots = (unit.dots || []).filter(d => d.turns > 0);
+    unit.dots.forEach(d => {
+      const dmg = Math.max(1, Math.round(unit.max * d.pct));
+      unit.soldiers -= dmg; if (unit.soldiers <= 0) { unit.soldiers = 0; unit.alive = false; }
+      log.push(`  🔥 ${unit.g.name} 受【${d.school}】持续伤 ${dmg}` + (unit.alive ? '' : '（败退）'));
+      d.turns--;
+    });
+    unit.dots = unit.dots.filter(d => d.turns > 0);
+    if (unit.ctrlTurns > 0) { unit.ctrlTurns--; if (unit.ctrlTurns <= 0) unit.ctrl = ''; }
+    if (unit.regenPct) { const h = Math.round((unit.max - unit.soldiers) * unit.regenPct); if (h > 0) { unit.soldiers = Math.min(unit.max, unit.soldiers + h); log.push(`  💚 ${unit.g.name} 伤兵恢复 +${h}`); } }
+  }
+
+  return { skillList, fireRate, commandSetup, cast, tick };
+});
+
+</script>
+<script>
 /* ===== src/combat.js ===== */
 /* ============================================================
- *  combat.js —— 战斗 / 环境 / 兵书（UMD）
- *  依赖：data(state)、util(clamp)。
+ *  combat.js —— 战斗 / 环境 / 兵书 / 战法演算（UMD）
+ *  依赖：data(state)、util(clamp)、skills(战法引擎)。
  *  所有对数据表的读取都在「调用时」走 DATA.state.*，确保热加载即时生效。
  * ============================================================ */
 (function (global, factory) {
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = factory(require('./data.js'), require('./util.js'));
+    module.exports = factory(require('./data.js'), require('./util.js'), require('./skills.js'));
   } else {
-    global.RULES_COMBAT = factory(global.RULES_DATA, global.RULES_UTIL);
+    global.RULES_COMBAT = factory(global.RULES_DATA, global.RULES_UTIL, global.RULES_SKILLS);
   }
-})(typeof self !== 'undefined' ? self : this, function (DATA, UTIL) {
+})(typeof self !== 'undefined' ? self : this, function (DATA, UTIL, SKILLS) {
   const clamp = UTIL.clamp;
 
   const SUIT = { S: 1.2, A: 1.0, B: 0.85, C: 0.7 };
-  // 将道风格 RPS：鹰扬>持重>奇变>鹰扬
   const STYLE_RPS = { 鹰扬: '持重', 持重: '奇变', 奇变: '鹰扬' };
-  // 战斗节奏配置：回合上限、猝死阶段（保证收束、节奏明快）、伤害曲线、伏兵未命中惩罚
   const COMBAT_CFG = { maxRound: 10, suddenDeathFrom: 7, suddenDeathRamp: 0.3, dmgBase: 1.0, ambushMissMorale: -15 };
+  const FORTIFIED = { city: 1, defile: 1, bridge: 1 };
 
   function suitCoef(s) { return SUIT[s] || 1.0; }
 
@@ -305,24 +500,15 @@
   function environmentModifiers(terrainKey, weatherKey, troopType) {
     const t = DATA.state.TERRAIN[terrainKey] || DATA.state.TERRAIN.plain;
     const w = DATA.state.WEATHER[weatherKey] || DATA.state.WEATHER.sun;
-    const troopAtk = t[troopType] !== undefined ? t[troopType] : 1.0;
-    return {
-      move: t.move * w.move,
-      atk: t.atk * w.atk,
-      def: t.def * w.def,
-      troopAtk,
-      fire: w.fire,
-      scout: w.scout,
-      flood: w.flood * (1 + t.flood),
-      morale: w.morale,
-      ambush: t.ambush,
-      choke: t.choke
-    };
+    const col = (DATA.state.TROOPS[troopType] && DATA.state.TROOPS[troopType].fieldCol) || 'inf';
+    const troopAtk = t[col] !== undefined ? t[col] : 1.0;
+    return { move: t.move * w.move, atk: t.atk * w.atk, def: t.def * w.def, troopAtk,
+      fire: w.fire, scout: w.scout, flood: w.flood * (1 + t.flood), morale: w.morale, ambush: t.ambush, choke: t.choke };
   }
   function chokePenalty(terrainKey) {
     const t = DATA.state.TERRAIN[terrainKey];
     if (!t || !t.choke) return 1.0;
-    return Math.max(0.5, 1 - 0.22 * t.choke);   // 天险依 CSV.choke 决定攻方受罚强度（数据驱动）
+    return Math.max(0.5, 1 - 0.22 * t.choke);
   }
 
   /* ---------- 兵书指令（诡道）---------- */
@@ -345,19 +531,56 @@
     return Math.random() > detectChance;
   }
 
-  /* ---------- 部队构建 ---------- */
+  /* ---------- 兵种克制 ---------- */
+  function troopRPS(att, def) {
+    const T = DATA.state.TROOPS; const a = T[att.g.troop], b = T[def.g.troop];
+    if (!a || !b) return 1.0;
+    if (a.beat && a.beat === def.g.troop) return 1.15;
+    if (b.beat && b.beat === att.g.troop) return 0.88;
+    return 1.0;
+  }
+
+  /* ---------- 阵营羁绊 + 武将缘分 ---------- */
+  function applyTeamBonus(army) {
+    const alive = army.filter(u => u.alive);
+    const ids = alive.map(u => u.g.id);
+    const facs = alive.map(u => u.faction);
+    const atkPct = [], defPct = [], rates = [], names = [];
+    const f0 = facs[0];
+    if (facs.length && facs.every(f => f === f0) && DATA.state.FACTIONS[f0]) {
+      const f = DATA.state.FACTIONS[f0];
+      atkPct.push(f.bondAtkPct); defPct.push(f.bondDefPct); rates.push(f.bondRate); names.push(f.name + '羁绊');
+    }
+    for (const b of Object.values(DATA.state.BONDS)) {
+      if (b.members.every(m => ids.includes(m))) { atkPct.push(b.atkPct); rates.push(b.rate); names.push(b.name); }
+    }
+    const aMul = 1 + atkPct.reduce((s, v) => s + v, 0);
+    const dMul = 1 + defPct.reduce((s, v) => s + v, 0);
+    const rBon = rates.reduce((s, v) => s + v, 0);
+    army.forEach(u => { u.atkMul *= aMul; u.defMul *= dMul; u.bondRate = rBon; u.bondNames = names; });
+    return names;
+  }
+
+  /* ---------- 部队构建（含等级成长）---------- */
   function makeUnit(generalId, soldiers, formationKey, opts) {
     opts = opts || {};
     const g = DATA.state.GENERALS.find(x => x.id === generalId) || DATA.state.GENERALS[0];
-    const isBlade = g.force >= g.intellect;
-    const primary = isBlade ? g.force : g.intellect;
-    const defStat = isBlade ? g.leadership : g.intellect;
+    const lv = g.level || 1;
+    const grow = 1 + (lv - 1) * 0.06;
+    const force = Math.round(g.force * grow), intellect = Math.round(g.intellect * grow);
+    const leadership = Math.round(g.leadership * grow), speed = Math.round(g.speed * grow);
+    const isBlade = force >= intellect;
+    const primary = isBlade ? force : intellect;
+    const defStat = isBlade ? leadership : intellect;
     const f = DATA.state.FORMATIONS[formationKey] || DATA.state.FORMATIONS.fengshi;
     return {
       g, soldiers: Math.round(soldiers), max: soldiers,
-      formation: f, isBlade, primary, defStat,
-      speed: g.speed, style: g.style, morale: opts.morale || 80,
-      isAmbush: !!opts.isAmbush, isHidden: !!opts.isHidden, alive: true
+      formation: f, isBlade, primary, defStat, force, intellect, speed, style: g.style, morale: opts.morale || 80,
+      faction: g.faction, skills: SKILLS.skillList(g), bondRate: 0, bondNames: [],
+      atkMul: 1, defMul: 1, speedMul: 1, dots: [], ctrl: '', ctrlTurns: 0,
+      silenced: false, disarmed: false, confused: false, reflectNext: false,
+      immuneCtrl: false, immuneCtrlUsed: false, regenPct: 0, regenMorale: 0, foeHitDown: 0,
+      skillCd: {}, alive: true, isAmbush: !!opts.isAmbush
     };
   }
 
@@ -373,7 +596,7 @@
     return { tianshi, dili, renhe, winProb };
   }
 
-  /* ---------- 战斗模拟（回合制战法演算）---------- */
+  /* ---------- 战斗模拟 ---------- */
   function styleCoef(attStyle, defStyle) {
     if (STYLE_RPS[attStyle] === defStyle) return 1.2;
     if (STYLE_RPS[defStyle] === attStyle) return 0.85;
@@ -398,6 +621,13 @@
     let round = 0, maxRound = CFG.maxRound;
     const allUnits = () => [...attacker, ...defender];
 
+    // 阵营/缘分 + 指挥/被动战法 开场结算
+    const bA = applyTeamBonus(attacker), bD = applyTeamBonus(defender);
+    if (bA.length) log.push('⚑ 我军【' + bA.join('·') + '】生效');
+    if (bD.length) log.push('⚑ 敌军【' + bD.join('·') + '】生效');
+    attacker.forEach(u => SKILLS.commandSetup(u, attacker, log));
+    defender.forEach(u => SKILLS.commandSetup(u, defender, log));
+
     if (ambushFailed) {
       attacker.forEach(u => u.morale = clamp(u.morale + CFG.ambushMissMorale, 20, 100));
       log.push('⚠️ 伏兵被识破！攻方暴露，士气受挫，守军抢得先机');
@@ -407,41 +637,74 @@
       round++;
       log.push(`—— 第${round}回合 ——`);
       let order = allUnits().filter(u => u.alive).sort((a, b) => b.speed - a.speed);
-      if (ambush && round === 1) {
-        order = [...attacker.filter(u => u.alive), ...defender.filter(u => u.alive)].sort((a, b) => b.speed - a.speed);
-      } else if (ambushFailed && round === 1) {
-        order = [...defender.filter(u => u.alive), ...attacker.filter(u => u.alive)].sort((a, b) => b.speed - a.speed);
-      }
+      if (ambush && round === 1) order = [...attacker.filter(u => u.alive), ...defender.filter(u => u.alive)].sort((a, b) => b.speed - a.speed);
+      else if (ambushFailed && round === 1) order = [...defender.filter(u => u.alive), ...attacker.filter(u => u.alive)].sort((a, b) => b.speed - a.speed);
+
       for (const u of order) {
         if (!u.alive) continue;
-        const foes = (attacker.includes(u) ? defender : attacker).filter(x => x.alive);
-        if (!foes.length) break;
-        const target = foes.reduce((m, x) => x.soldiers > m.soldiers ? x : m, foes[0]);
         const isAttackerSide = attacker.includes(u);
-        const sCoef = styleCoef(u.style, target.style);
-        const troopAtk = (DATA.state.TERRAIN[terrainKey][u.g.troop] !== undefined) ? DATA.state.TERRAIN[terrainKey][u.g.troop] : 1.0;
-        const sudden = round >= CFG.suddenDeathFrom ? (1 + (round - CFG.suddenDeathFrom) * CFG.suddenDeathRamp) : 1;
-        let atkMul = u.formation.atk * suitCoef(u.g.suit) * env.atk * troopAtk
-                     * sCoef * (u.morale / 80) * (isAttackerSide ? choke : 1) * (u.isAmbush && round === 1 ? 1.5 : 1) * sudden;
-        const K = 150;
-        const DAMAGE_SCALE = 4.0;
-        const effDef = target.defStat * env.def;   // 地形防御加成：高城防/山地降低守军承伤（数据驱动）
-        const mitigation = effDef / (effDef + K);
-        const dmg = Math.max(1, Math.round(u.primary * atkMul * (1 - mitigation) * DAMAGE_SCALE * CFG.dmgBase));
-        target.soldiers -= dmg;
-        log.push(`${u.g.name}(${u.isBlade ? '兵刃' : '谋略'}) → ${target.g.name} 造成 ${dmg} 伤害（剩${Math.max(0, target.soldiers)}）`);
-        if (Math.random() < 0.3) {
-          const extra = Math.round(dmg * 0.5);
-          target.soldiers -= extra;
-          log.push(`  ⚡ ${u.g.name} 发动【${u.g.skill}】追加 ${extra} 伤害`);
+        const allies = isAttackerSide ? attacker : defender;
+        const foes = isAttackerSide ? defender : attacker;
+        const aliveFoes = foes.filter(x => x.alive);
+        if (!aliveFoes.length) break;
+
+        // 控制：震慑/沉默/缴械/混乱
+        if (u.ctrl === 'stun') { log.push(`  💫 ${u.g.name} 被震慑，本回合无法行动`); continue; }
+        if (u.ctrl === 'silence') log.push(`  🤫 ${u.g.name} 被沉默，战法受限`);
+
+        // 普攻目标（混乱则误击友军）
+        let target;
+        if (u.ctrl === 'confuse') {
+          const mates = allies.filter(x => x.alive && x !== u);
+          target = mates.length ? mates[Math.floor(Math.random() * mates.length)] : aliveFoes[0];
+          log.push(`  🌀 ${u.g.name} 混乱，误击${target === aliveFoes[0] ? '敌' : '友'}军`);
+        } else {
+          target = aliveFoes.reduce((m, x) => x.soldiers > m.soldiers ? x : m, aliveFoes[0]);
         }
-        if (target.soldiers <= 0) { target.alive = false; target.soldiers = 0; log.push(`  ☠ ${target.g.name} 败退`); }
+        if (!u.disarmed) {
+          const sCoef = styleCoef(u.style, target.style);
+          const col = (DATA.state.TROOPS[u.g.troop] && DATA.state.TROOPS[u.g.troop].fieldCol) || 'inf';
+          const troopAtk = (DATA.state.TERRAIN[terrainKey][col] !== undefined) ? DATA.state.TERRAIN[terrainKey][col] : 1.0;
+          const rps = troopRPS(u, target);
+          const siege = (FORTIFIED[terrainKey] && DATA.state.TROOPS[u.g.troop].siegeBonus > 1) ? DATA.state.TROOPS[u.g.troop].siegeBonus : 1;
+          const sudden = round >= CFG.suddenDeathFrom ? (1 + (round - CFG.suddenDeathFrom) * CFG.suddenDeathRamp) : 1;
+          const atkMul = u.formation.atk * suitCoef(u.g.suit) * env.atk * troopAtk * rps * siege
+            * sCoef * (u.morale / 80) * (isAttackerSide ? choke : 1) * (u.isAmbush && round === 1 ? 1.5 : 1) * sudden * u.atkMul
+            * (1 - (u.foeHitDown || 0));
+          const K = 150;
+          const DAMAGE_SCALE = 4.0;
+          const effDef = target.defStat * env.def * target.defMul;
+          const mitigation = effDef / (effDef + K);
+          const dmg = Math.max(1, Math.round(u.primary * atkMul * (1 - mitigation) * DAMAGE_SCALE * CFG.dmgBase));
+          target.soldiers -= dmg;
+          log.push(`${u.g.name}(${u.g.troop}·${u.isBlade ? '兵刃' : '谋略'}) → ${target.g.name}(${target.g.troop}) 伤 ${dmg}${rps > 1 ? ' 克制↑' : (rps < 1 ? ' 被克↓' : '')}（剩${Math.max(0, target.soldiers)}）`);
+          if (target.soldiers <= 0) { target.alive = false; target.soldiers = 0; log.push(`  ☠ ${target.g.name} 败退`); }
+        }
+
+        // 主动战法
+        if (u.ctrl !== 'silence') {
+          for (const sk of u.skills) {
+            if (sk.type !== '主动') continue;
+            if ((u.skillCd[sk.id] || 0) > 0) continue;
+            const rate = SKILLS.fireRate(sk, u);
+            if (Math.random() * 100 < rate) {
+              SKILLS.cast(sk, u, allies, foes, env, log);
+              u.skillCd[sk.id] = (sk.cd || 0) + 1;
+            } else {
+              log.push(`  · ${u.g.name}【${sk.name}】未发动(${rate}%)`);
+            }
+          }
+        }
+
+        // 回合末：持续伤 + 控制倒计时 + 冷却递减
+        SKILLS.tick(u, log);
+        for (const k in u.skillCd) if (u.skillCd[k] > 0) u.skillCd[k]--;
       }
       if (ctx.floodActive) {
         defender.forEach(u => { if (u.alive) { const d = Math.round(300 * env.flood); u.soldiers -= d; if (u.soldiers <= 0) { u.alive = false; u.soldiers = 0; log.push(`  🌊 ${u.g.name} 被水淹败退`); } } });
       }
       squadMoraleContagion(allUnits());
-      allUnits().forEach(u => { if (u.alive) u.morale = clamp(u.morale - (u.soldiers / u.max < 0.5 ? 5 : 0) + env.morale * 0.1, 20, 100); });
+      allUnits().forEach(u => { if (u.alive) u.morale = clamp(u.morale - (u.soldiers / u.max < 0.5 ? 5 : 0) + env.morale * 0.1 + (u.regenMorale || 0) * 4, 20, 100); });
     }
     const attWin = defender.every(u => !u.alive);
     const defWin = attacker.every(u => !u.alive);
@@ -451,8 +714,9 @@
       const dLeft = defender.reduce((s, u) => s + u.soldiers, 0);
       result = aLeft >= dLeft ? '攻方胜(兵力占优)' : '守方胜(兵力占优)';
     }
-    return { result, round, log, attackers: attacker.map(u => ({ name: u.g.name, soldiers: u.soldiers, alive: u.alive })),
-             defenders: defender.map(u => ({ name: u.g.name, soldiers: u.soldiers, alive: u.alive })) };
+    return { result, round, log,
+      attackers: attacker.map(u => ({ name: u.g.name, soldiers: u.soldiers, alive: u.alive, skills: u.skills.map(s => s.name) })),
+      defenders: defender.map(u => ({ name: u.g.name, soldiers: u.soldiers, alive: u.alive, skills: u.skills.map(s => s.name) })) };
   }
 
   /* ---------- 水攻持续 ---------- */
@@ -480,7 +744,7 @@
   }
 
   return {
-    SUIT, STYLE_RPS, COMBAT_CFG, suitCoef,
+    SUIT, STYLE_RPS, COMBAT_CFG, FORTIFIED, suitCoef, troopRPS,
     environmentModifiers, chokePenalty, waterAttack, emptyFort, ambushDetect,
     makeUnit, miaoSuan, styleCoef, simulateCombat,
     squadMoraleContagion, floodDuration, startFlood, tickFlood, chooseFormation
@@ -597,12 +861,53 @@
 
 </script>
 <script>
+/* ===== src/economy.js ===== */
+/* ============================================================
+ *  economy.js —— 资源经济（UMD）
+ *  粮/木/铁/石/币 五种资源：领地/城池产出、征兵/战法升级/城建消耗。
+ *  纯数据模型，不涉及 UI；Demo 负责把数值呈现为资源条与按钮。
+ * ============================================================ */
+(function (global, factory) {
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = factory();
+  } else {
+    global.RULES_ECON = factory();
+  }
+})(typeof self !== 'undefined' ? self : this, function () {
+  const TYPES = ['粮', '木', '铁', '石', '币'];
+  const RES_META = {
+    粮: { key: '粮', color: '#e0c060', icon: '🌾' },
+    木: { key: '木', color: '#7fae6b', icon: '🪵' },
+    铁: { key: '铁', color: '#9aa0a6', icon: '⚒' },
+    石: { key: '石', color: '#b0a890', icon: '🪨' },
+    币: { key: '币', color: '#d8b84a', icon: '🪙' }
+  };
+  function starting() { return { 粮: 2000, 木: 800, 铁: 600, 石: 600, 币: 300 }; }
+  // 每时节产出：粮随季节与领地数；城池额外产木铁石；币随占领增长
+  function perTurn(ownedLand, cities, seasonGrainMul) {
+    seasonGrainMul = seasonGrainMul || 1;
+    return {
+      粮: Math.round(ownedLand * 8 * seasonGrainMul),
+      木: Math.round(cities * 20),
+      铁: Math.round(cities * 14),
+      石: Math.round(cities * 14),
+      币: Math.round(ownedLand * 1)
+    };
+  }
+  function recruitCost(soldiers) { return { 粮: Math.round(soldiers * 0.4), 币: Math.round(soldiers * 0.05) }; }
+  function upgradeSkillCost(level) { return { 币: 100 + level * 80, 铁: 50 + level * 30 }; }
+  function cityCost() { return { 木: 400, 铁: 300, 石: 300, 币: 200 }; }
+  return { TYPES, RES_META, starting, perTurn, recruitCost, upgradeSkillCost, cityCost };
+});
+
+</script>
+<script>
 /* ===== src/rules.js ===== */
 /* ============================================================
  *  rules.js —— 三国 SLG 单机版 · 聚合入口（UMD）
  *  纯逻辑层（无 DOM 依赖）的「总装」：聚合各模块并统一以
  *  window.RULES（浏览器）/ module.exports（Node）暴露。
- *  子模块：util / data / combat / diplomacy / scenario。
+ *  子模块：util / data / combat / diplomacy / scenario / skills / economy。
  *  数据表用 getter 暴露，因此 data.reload() 热加载后本对象即时生效。
  *
  *  引擎移植接口（Godot/Cocos 等）：外部引擎只需
@@ -610,7 +915,6 @@
  *    2) 调用纯函数（simulateCombat / makeUnit / createDiplomacy …）；
  *    3) 用 loadCSVFromDir/loadConfigFromServer 注入配表；
  *    4) 渲染与输入由引擎自管，逻辑层不触碰 DOM。
- *  详见 GDD「架构与移植接口」一节。
  * ============================================================ */
 (function (global, factory) {
   if (typeof module !== 'undefined' && module.exports) {
@@ -619,7 +923,9 @@
       require('./data.js'),
       require('./combat.js'),
       require('./diplomacy.js'),
-      require('./scenario.js')
+      require('./scenario.js'),
+      require('./skills.js'),
+      require('./economy.js')
     );
   } else {
     global.RULES = factory(
@@ -627,17 +933,23 @@
       global.RULES_DATA,
       global.RULES_COMBAT,
       global.RULES_DIPLO,
-      global.RULES_SCN
+      global.RULES_SCN,
+      global.RULES_SKILLS,
+      global.RULES_ECON
     );
   }
-})(typeof self !== 'undefined' ? self : this, function (UTIL, DATA, COMBAT, DIPLO, SCN) {
+})(typeof self !== 'undefined' ? self : this, function (UTIL, DATA, COMBAT, DIPLO, SCN, SKILLS, ECON) {
 
   // 聚合所有模块 API（函数引用稳定，可直接展开）
-  const RULES = Object.assign({}, UTIL, COMBAT, DIPLO, SCN, {
+  // 注意：ECON 同时以「命名空间」暴露（R.ECON.*），供 Demo 调用；
+  //       其余模块函数则平铺到 RULES 上（R.makeUnit 等）便于引擎移植。
+  //       数据表走 getter（R.SKILLS/R.TROOPS/...），与模块命名空间不冲突。
+  const RULES = Object.assign({}, UTIL, COMBAT, DIPLO, SCN, SKILLS, ECON, {
     parseCSV: DATA.parseCSV,
     reload: DATA.reload,
     loadConfigFromServer: DATA.loadConfigFromServer,
-    loadCSVFromDir: DATA.loadCSVFromDir
+    loadCSVFromDir: DATA.loadCSVFromDir,
+    ECON: ECON
   });
 
   // 数据表用 getter 暴露：热加载(reload)重赋值 state.* 后，此处自动读到新表
@@ -646,7 +958,11 @@
     WEATHER:    { get() { return DATA.state.WEATHER; },    enumerable: true, configurable: true },
     SEASON:     { get() { return DATA.state.SEASON; },     enumerable: true, configurable: true },
     FORMATIONS: { get() { return DATA.state.FORMATIONS; }, enumerable: true, configurable: true },
-    GENERALS:   { get() { return DATA.state.GENERALS; },   enumerable: true, configurable: true }
+    GENERALS:   { get() { return DATA.state.GENERALS; },   enumerable: true, configurable: true },
+    SKILLS:     { get() { return DATA.state.SKILLS; },     enumerable: true, configurable: true },
+    TROOPS:     { get() { return DATA.state.TROOPS; },     enumerable: true, configurable: true },
+    FACTIONS:   { get() { return DATA.state.FACTIONS; },   enumerable: true, configurable: true },
+    BONDS:      { get() { return DATA.state.BONDS; },      enumerable: true, configurable: true }
   });
 
   if (typeof window !== 'undefined') window.RULES = RULES;
@@ -655,7 +971,7 @@
 
 </script>
 <script>
-window.__CSV__ = {"terrain":"key,name,move,atk,def,cav,inf,arch,eng,scout,ambush,flood,choke,marchDmg,color,desc\nplain,平原,1.0,1.0,1.0,1.15,1.0,1.0,0.9,1.0,0,0,0,0,#cfe8a9,骑兵主场，大会战地形\nhill,丘陵,0.8,1.0,1.15,0.9,1.1,1.1,1.0,0.9,0.1,0,0,0,#bcd99a,缓坡易守，弓兵射程+\nmountain,山地,0.6,0.9,1.15,0.7,1.15,1.0,0.8,0.8,0.2,0,1,0,#9fae7a,天险难攻，伏兵佳\nforest,森林,0.8,1.0,1.1,0.85,1.0,1.15,0.9,0.7,0.3,0,0,0,#7fae6b,隐蔽侦察-，伏兵极佳，火攻蔓延\nswamp,沼泽,0.5,0.95,0.95,0.6,0.9,0.9,0.7,0.9,0.1,0.2,0,0.06,#a8b18c,行军持续损兵，补给难恢复\nriver,河流,0.1,1.0,1.0,0.5,0.8,1.0,1.2,0.6,0,1,0,0,#7fb6d6,阻隔，需渡口，邻低洼可水攻\nlowland,低洼盆地,0.9,0.95,0.85,1.0,0.95,1.0,0.9,1.0,0,0.6,0,0,#c9d8a0,洪水受害区，忌驻重兵\ndefile,峡谷隘口,0.6,0.9,1.18,0.7,1.1,1.0,0.8,0.8,0.35,0,1,0,#8c9a6e,一夫当关，攻方通道窄受罚\ncity,城池关隘,1.0,1.0,1.12,0.9,1.1,1.0,1.3,0.9,0.05,0,1,0,#d8c98c,城防值，天险，攻方惩罚\ndesert,荒漠戈壁,0.7,1.0,1.0,1.0,0.9,1.0,0.8,1.1,0,0,0,0.04,#e3d6a0,补给消耗↑，疫病↑，忌久战\ntundra,雪原冰原,0.6,1.0,1.05,0.8,1.0,0.95,0.8,0.9,0.1,0,0,0.03,#dfe7ee,移速↓，干柴利火攻\nbridge,桥梁栈道,1.0,1.0,1.0,0.9,1.0,1.0,1.0,1.0,0,0,0.7,0,#c2b08a,咽喉单线点，可断桥阻敌\n","weather":"key,name,move,atk,def,fire,cav,scout,flood,morale,desc\nsun,晴,1.0,1.0,1.0,1.0,1.0,1.0,0.0,0,基准天气\nrain,雨,0.8,1.0,1.0,0.2,0.8,0.9,1.5,-5,利水攻、火攻失效、泥泞骑兵弱、疫病↑\nsnow,雪严寒,0.7,1.0,1.0,1.4,0.8,0.9,0.5,-8,行军损耗↑、补给耗↑、干柴利火攻、冻伤降士气\nwind,大风,1.0,1.0,1.0,1.5,1.0,1.0,0.6,0,火攻蔓延↑、弓箭准确↓、水势弱\nfog,大雾,0.9,1.0,1.0,1.0,1.0,0.4,1.0,0,视野↓侦察失效，伏击突袭空城计加成\ndrought,酷暑旱,0.9,1.0,1.0,1.8,1.0,1.1,0.2,-6,火攻极效、体力↓、疫病↑、水源必争\n","season":"key,name,grain,rain,sun,fog,snow,wind,drought,desc\nspring,春,1.1,3,3,1,1,1,0,春汛涨水，利水攻；农时产出+\nsummer,夏,1.2,2,4,1,0,1,2,高温多雨，火攻需谨慎，粮产高峰\nautumn,秋,1.0,2,3,1,0,2,1,秋高气爽，多风利火，宜决战\nwinter,冬,0.7,1,2,1,4,1,0,天寒地冻，补给难，雪原火攻强，粮产低\n","formations":"key,name,atk,def,morale,flank,reqInt,desc\nfengshi,锋矢,1.2,0.85,1.0,0.9,0,中央突破，攻高侧翼脆\nheyi,鹤翼,1.0,1.0,1.0,1.3,0,两翼包抄，侧击伤害+\nfangyuan,方圆,0.9,1.3,1.1,0.9,0,防御反伤，机动-\nbazhen,八阵,1.05,1.1,1.0,1.0,90,全属性小幅+抗控，需高智将领\nyanxing,雁行,1.1,0.95,1.0,1.1,0,远程/侧翼加成\nyulin,鱼鳞,0.95,1.2,1.05,0.95,0,层层防御，坚壁\n","generals":"id,name,star,force,intellect,leadership,speed,style,trait,troop,suit,skill,skillDesc\ncao1,曹操,5,92,89,96,78,鹰扬,多疑,骑,S,奸雄,每回合概率提升全军攻击并降低敌方防御\nliu1,刘备,5,82,96,93,72,持重,仁德,步,S,仁德,提升全军士气与伤兵恢复速度\nsun1,孙权,4,84,92,92,76,奇变,沉稳,弓,S,制衡,概率使敌方主动战法失效并反弹\nguan1,关羽,5,97,75,95,80,鹰扬,刚烈,步,S,威震华夏,对兵力最高敌军造成巨额兵刃伤害并震慑\nzhang1,张飞,5,98,52,92,85,鹰扬,短虑,步,A,咆哮,高概率混乱敌军前排，自身易中控\nzhao1,赵云,5,96,76,93,95,鹰扬,沉稳,骑,S,龙胆,突击多次且免疫首次控制\nzhu1,诸葛亮,5,55,100,85,72,奇变,多疑,步,S,空城,残血时大幅提升防御并使敌方命中下降（空城计）\nzhou1,周瑜,5,72,93,90,83,奇变,傲岸,弓,S,火攻,火系伤害翻倍并点燃地形\nsima1,司马懿,5,68,97,91,74,持重,隐忍,步,S,鹰视,持续偷取敌军属性并削弱\nlv1,吕布,5,100,35,85,98,鹰扬,短虑,骑,S,无双,极高兵刃爆发，但自身易被混乱\nhuang1,黄忠,4,94,62,88,79,持重,老当益壮,弓,S,百步,远程暴击并破防\nlu1,陆逊,5,70,95,89,80,奇变,沉稳,弓,S,火烧连营,火攻蔓延且施加灼烧\n"};
+window.__CSV__ = {"terrain":"key,name,move,atk,def,cav,inf,arch,eng,scout,ambush,flood,choke,marchDmg,color,desc\nplain,平原,1.0,1.0,1.0,1.15,1.0,1.0,0.9,1.0,0,0,0,0,#cfe8a9,骑兵主场，大会战地形\nhill,丘陵,0.8,1.0,1.15,0.9,1.1,1.1,1.0,0.9,0.1,0,0,0,#bcd99a,缓坡易守，弓兵射程+\nmountain,山地,0.6,0.9,1.15,0.7,1.15,1.0,0.8,0.8,0.2,0,1,0,#9fae7a,天险难攻，伏兵佳\nforest,森林,0.8,1.0,1.1,0.85,1.0,1.15,0.9,0.7,0.3,0,0,0,#7fae6b,隐蔽侦察-，伏兵极佳，火攻蔓延\nswamp,沼泽,0.5,0.95,0.95,0.6,0.9,0.9,0.7,0.9,0.1,0.2,0,0.06,#a8b18c,行军持续损兵，补给难恢复\nriver,河流,0.1,1.0,1.0,0.5,0.8,1.0,1.2,0.6,0,1,0,0,#7fb6d6,阻隔，需渡口，邻低洼可水攻\nlowland,低洼盆地,0.9,0.95,0.85,1.0,0.95,1.0,0.9,1.0,0,0.6,0,0,#c9d8a0,洪水受害区，忌驻重兵\ndefile,峡谷隘口,0.6,0.9,1.18,0.7,1.1,1.0,0.8,0.8,0.35,0,1,0,#8c9a6e,一夫当关，攻方通道窄受罚\ncity,城池关隘,1.0,1.0,1.12,0.9,1.1,1.0,1.3,0.9,0.05,0,1,0,#d8c98c,城防值，天险，攻方惩罚\ndesert,荒漠戈壁,0.7,1.0,1.0,1.0,0.9,1.0,0.8,1.1,0,0,0,0.04,#e3d6a0,补给消耗↑，疫病↑，忌久战\ntundra,雪原冰原,0.6,1.0,1.05,0.8,1.0,0.95,0.8,0.9,0.1,0,0,0.03,#dfe7ee,移速↓，干柴利火攻\nbridge,桥梁栈道,1.0,1.0,1.0,0.9,1.0,1.0,1.0,1.0,0,0,0.7,0,#c2b08a,咽喉单线点，可断桥阻敌\n","weather":"key,name,move,atk,def,fire,cav,scout,flood,morale,desc\nsun,晴,1.0,1.0,1.0,1.0,1.0,1.0,0.0,0,基准天气\nrain,雨,0.8,1.0,1.0,0.2,0.8,0.9,1.5,-5,利水攻、火攻失效、泥泞骑兵弱、疫病↑\nsnow,雪严寒,0.7,1.0,1.0,1.4,0.8,0.9,0.5,-8,行军损耗↑、补给耗↑、干柴利火攻、冻伤降士气\nwind,大风,1.0,1.0,1.0,1.5,1.0,1.0,0.6,0,火攻蔓延↑、弓箭准确↓、水势弱\nfog,大雾,0.9,1.0,1.0,1.0,1.0,0.4,1.0,0,视野↓侦察失效，伏击突袭空城计加成\ndrought,酷暑旱,0.9,1.0,1.0,1.8,1.0,1.1,0.2,-6,火攻极效、体力↓、疫病↑、水源必争\n","season":"key,name,grain,rain,sun,fog,snow,wind,drought,desc\nspring,春,1.1,3,3,1,1,1,0,春汛涨水，利水攻；农时产出+\nsummer,夏,1.2,2,4,1,0,1,2,高温多雨，火攻需谨慎，粮产高峰\nautumn,秋,1.0,2,3,1,0,2,1,秋高气爽，多风利火，宜决战\nwinter,冬,0.7,1,2,1,4,1,0,天寒地冻，补给难，雪原火攻强，粮产低\n","formations":"key,name,atk,def,morale,flank,reqInt,desc\nfengshi,锋矢,1.2,0.85,1.0,0.9,0,中央突破，攻高侧翼脆\nheyi,鹤翼,1.0,1.0,1.0,1.3,0,两翼包抄，侧击伤害+\nfangyuan,方圆,0.9,1.3,1.1,0.9,0,防御反伤，机动-\nbazhen,八阵,1.05,1.1,1.0,1.0,90,全属性小幅+抗控，需高智将领\nyanxing,雁行,1.1,0.95,1.0,1.1,0,远程/侧翼加成\nyulin,鱼鳞,0.95,1.2,1.05,0.95,0,层层防御，坚壁\n","generals":"id,name,star,force,intellect,leadership,speed,style,trait,troop,suit,skill,skillDesc,faction,skills,level\ncao1,曹操,5,92,89,96,78,鹰扬,多疑,骑,S,奸雄,每回合概率提升全军攻击并降低敌方防御,魏,jianxiong,5\nliu1,刘备,5,82,96,93,72,持重,仁德,步,S,仁德,提升全军士气与伤兵恢复速度,蜀,rende,5\nsun1,孙权,4,84,92,92,76,奇变,沉稳,弓,S,制衡,概率使敌方主动战法失效并反弹,吴,zhizhi,4\nguan1,关羽,5,97,75,95,80,鹰扬,刚烈,步,S,威震华夏,对兵力最高敌军造成巨额兵刃伤害并震慑,蜀,weizhen,5\nzhang1,张飞,5,98,52,92,85,鹰扬,短虑,步,A,咆哮,高概率混乱敌军前排自身易中控,蜀,paoxiao,5\nzhao1,赵云,5,96,76,93,95,鹰扬,沉稳,骑,S,龙胆,突击多次且免疫首次控制,蜀,longdan,5\nzhu1,诸葛亮,5,55,100,85,72,奇变,多疑,步,S,空城,残血时大幅提升防御并使敌方命中下降（空城计）,蜀,kongcheng,5\nzhou1,周瑜,5,72,93,90,83,奇变,傲岸,弓,S,火攻,火系伤害翻倍并点燃地形,吴,huogong,5\nsima1,司马懿,5,68,97,91,74,持重,隐忍,步,S,鹰视,持续偷取敌军属性并削弱,魏,yingshi,5\nlv1,吕布,5,100,35,85,98,鹰扬,短虑,骑,S,无双,极高兵刃爆发但自身易被混乱,群,wushuang,5\nhuang1,黄忠,4,94,62,88,79,持重,老当益壮,弓,S,百步,远程暴击并破防,蜀,baibu,4\nlu1,陆逊,5,70,95,89,80,奇变,沉稳,弓,S,火烧连营,火攻蔓延且施加灼烧,吴,shaolian,5\n","skills":"id,name,type,school,target,prep,cd,rate,dmgPct,dmgSchool,healPct,buffAtkPct,buffDefPct,buffMorale,debuffAtkPct,debuffDefPct,ctrl,ctrlChance,dotPct,dotSchool,stealPct,reflect,immuneCtrl,duration,desc\njianxiong,奸雄,指挥,谋略,ally_all,0,0,100,0,,,0.10,0.05,,,,,0.08,,,,0,0,10,每回合提升全军攻击并降低敌方防御\nrende,仁德,被动,谋略,ally_all,0,0,100,0,,0.06,,,0.05,,,,,0.06,,,,0,0,10,提升全军士气与伤兵恢复速度\nzhizhi,制衡,主动,谋略,foe_all,0,2,45,0,,,,,,-0.10,,,,0.50,,1,0,1,概率使敌方主动战法失效并反弹\nweizhen,威震华夏,主动,兵刃,foe_top,0,2,40,1.20,兵刃,,,,,,,-0.15,shock,0.60,,,,,0,2,对兵力最高敌军造成巨额兵刃伤害并震慑\npaoxiao,咆哮,主动,兵刃,foe_front,0,2,50,0.45,兵刃,,,,,,,-0.10,confuse,0.55,,,,,0,1,高概率混乱敌军前排自身易中控\nlongdan,龙胆,主动,兵刃,foe_top,0,2,55,1.00,兵刃,,,,,,-0.10,,,,,1,0,2,突击多次且免疫首次控制\nkongcheng,空城,被动,谋略,self,0,0,100,0,,,,0.25,,,0.10,,,,,0,1,10,残血时大幅提升防御并使敌方命中下降\nhuogong,火攻,主动,谋略,foe_all,0,2,45,0.80,谋略,,,,,,,-0.08,,fire,0.12,0.45,,,,0,2,火系伤害翻倍并点燃地形施加灼烧\nyingshi,鹰视,主动,谋略,foe_all,0,2,45,0,,,,,,,,-0.12,shock,0.40,0.12,,,,0,2,持续偷取敌军属性并削弱\nwushuang,无双,主动,兵刃,foe_top,0,2,50,1.50,兵刃,,,,,,,-0.12,,,,,0,0,0,极高兵刃爆发但自身易被混乱\nbaibu,百步,主动,兵刃,foe_top,0,2,50,1.10,兵刃,,,,,,,-0.20,,,,,0,0,2,远程暴击并破防\nshaolian,火烧连营,主动,谋略,foe_all,0,2,45,0.70,谋略,,,,,,,-0.06,,fire,0.15,0.45,,,,0,3,火攻蔓延且施加灼烧\n","troops":"id,name,beat,fieldCol,siegeBonus,desc\n步,步兵,弓,inf,1.0,结阵稳守正面，克弓兵，平原山地皆宜\n骑,骑兵,步,cav,1.0,机动突袭，克步兵，平原荒漠逞威\n弓,弓兵,骑,arch,1.0,远程齐射，克骑兵，林地丘陵射程佳\n车,车兵,,eng,1.3,攻城冲车，野战平庸，破城拔寨专精\n械,器械,,eng,1.6,投石弩车，野战怯弱，摧城毁垒无双\n","factions":"id,name,bondAtkPct,bondDefPct,bondRate,desc\n魏,魏,0.08,0.05,0.05,虎痴霸业，同阵魏将攻防与战法发动俱增\n蜀,蜀,0.08,0.05,0.05,汉室宗亲，同阵蜀将攻防与战法发动俱增\n吴,吴,0.08,0.05,0.05,江东子弟，同阵吴将攻防与战法发动俱增\n群,群,0.06,0.04,0.04,乱世群雄，同阵群雄小幅增益\n","bonds":"id,name,members,atkPct,rate,desc\ntaoyuan,桃园结义,liu1;guan1;zhang1,0.10,0.08,刘关张同阵，义薄云天全军逞威\nwuhu,五虎上将,guan1;zhang1;zhao1;huang1,0.06,0.05,五虎之勇，陷阵无前\ndongwu,东吴都督,zhou1;lu1,0.08,0.06,周瑜陆逊火攻联动，烈焰焚敌\nweiwu,魏武雄略,cao1;sima1,0.07,0.05,曹操司马同朝，权谋并施\n"};
 </script>
 <script>
 (function(){
@@ -668,6 +984,9 @@ window.__CSV__ = {"terrain":"key,name,move,atk,def,cav,inf,arch,eng,scout,ambush
 
 <script>
 const R = window.RULES;
+// 资源经济（粮/木/铁/石/币）与玩家可征兵力
+let RES = (R.ECON ? R.ECON.starting() : {粮:2000,木:800,铁:600,石:600,币:300});
+let playerSoldiers = 1400;   // 出征单队兵力，征兵可提升
 const W=80, H=56, CS=16;                 // 大地图：80×56
 const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
 const wrap=document.getElementById('mapWrap');
@@ -744,7 +1063,7 @@ function playerSetRel(b, s){
 
 // 任意地块的守军（玩家/AI/中立统一）
 function defenderArmy(tile){
-  if(tile.owner==='player'){ const u=ROSTER.slice(0,3).map((id,i)=>R.makeUnit(id,1400,i===0?'fengshi':(i===1?'heyi':'yulin'),{morale:85})); return {units:u,total:4200}; }
+  if(tile.owner==='player'){ const u=ROSTER.slice(0,3).map((id,i)=>R.makeUnit(id,playerSoldiers,i===0?'fengshi':(i===1?'heyi':'yulin'),{morale:85})); return {units:u,total:playerSoldiers*3}; }
   if(isAI(tile.owner)){ const L=lordById(tile.owner); const u=L.gen.map((id,i)=>R.makeUnit(id,L.strength,i===0?'fengshi':'heyi',{morale:80})); return {units:u,total:L.strength*3}; }
   const pool=['lv1','zhang1','huang1','sun1','sima1','liu1'];
   const n=Math.min(3,1+Math.floor(tile.lvl/2)); const u=[];
@@ -1033,16 +1352,27 @@ function previewBattle(x,y){
   const ambushFailed = !!ambushSrc && !det;
   if(ambushSrc) ambushSrc.ambush=false;   // 伏兵发动或暴露后清除
   const ms=R.miaoSuan({weather:weatherKey,attTerrain:'plain',defTerrain:c.t,attMorale:85,leadAvg:92});
-  const att=ROSTER.slice(0,3).map((id,i)=>R.makeUnit(id,1400,i===0?'fengshi':(i===1?'heyi':'yulin'),{morale:85}));
-  pendingBattle={x,y,ambush,ambushFailed,att,def:defenderArmy(c).units,ms,c,lvl};
+  const att=ROSTER.slice(0,3).map((id,i)=>R.makeUnit(id,playerSoldiers,i===0?'fengshi':(i===1?'heyi':'yulin'),{morale:85}));
+  const def=defenderArmy(c).units;
+  pendingBattle={x,y,ambush,ambushFailed,att,def,ms,c,lvl};
   const win = ms.winProb>=55, tie = ms.winProb>=40;
   const odds = win?'胜算较大':(tie?'胜负难料':'凶多吉少');
-  document.getElementById('info').innerHTML=`🎯 出征【${R.TERRAIN[c.t].name}】｜守军 Lv${lvl}（${c.soldiers}）｜${odds}`;
-  document.getElementById('miao').innerHTML=`<div class="score"><div>天时<b>${ms.tianshi}</b></div><div>地利<b>${ms.dili}</b></div><div>人和<b>${ms.renhe}</b></div></div>`
-    + `<div class="hint">预测胜率 <b style="color:${win?'#7CFC8A':(tie?'#ffd479':'#ff7b7b')}">${ms.winProb}%</b> ｜【${R.TERRAIN[c.t].name}】·【${R.WEATHER[weatherKey].name}】${ambush?'｜⚔️伏击成功':(ambushFailed?'｜⚠️伏兵被识破':'')}</div>`
+  const troopName = t => (R.TROOPS[t] ? R.TROOPS[t].name : t);
+  const skTag = s => ({主动:'主',被动:'被',指挥:'指',追击:'追'}[s.type]||'主');
+  const atkRoster = att.map(u=>`<div class="unit"><b>${u.g.name}</b><span class="tr">${troopName(u.g.troop)}</span>${u.skills.map(s=>`<i class="sk">${s.name}<small>${skTag(s)}</small></i>`).join('')}</div>`).join('');
+  const defRoster = def.map(u=>`<div class="unit"><b>${u.g.name}</b><span class="tr">${troopName(u.g.troop)}</span></div>`).join('');
+  let adv=0, dis=0; att.forEach(u=>def.forEach(d=>{ const r=R.troopRPS(u,d); if(r>1)adv++; else if(r<1)dis++; }));
+  const rpsText = adv>dis?`兵种克制占优(${adv}:${dis})`:(dis>adv?`兵种被克(${adv}:${dis})`:`兵种均势(${adv}:${dis})`);
+  const bond = att[0].bondNames && att[0].bondNames.length ? '【'+att[0].bondNames.join('·')+'】' : '无阵营加成';
+  document.getElementById('info').innerHTML=
+    `🎯 出征【${R.TERRAIN[c.t].name}】｜守军 Lv${lvl}（${c.soldiers}）｜<b style="color:${win?'#7CFC8A':(tie?'#ffd479':'#ff7b7b')}">${odds}(${ms.winProb}%)</b>`
+    + `<div class="roster">我方出征：${atkRoster}</div>`
+    + `<div class="roster">守军：${defRoster}</div>`
+    + `<div class="hint">${rpsText} ｜ 我方${bond} ｜【${R.TERRAIN[c.t].name}】·【${R.WEATHER[weatherKey].name}】${ambush?'｜⚔️伏击':(ambushFailed?'｜⚠️伏兵被识破':'')}</div>`
     + `<div style="display:flex;gap:8px;margin-top:10px">`
     + `<button id="btnGo" style="flex:1;min-height:46px;border:none;border-radius:8px;background:#d6443d;color:#fff;font-size:16px">⚔️ 出征</button>`
     + `<button id="btnCancel" style="flex:1;min-height:46px;border:none;border-radius:8px;background:#4a525c;color:#fff;font-size:16px">取消</button></div>`;
+  document.getElementById('miao').innerHTML=`<div class="score"><div>天时<b>${ms.tianshi}</b></div><div>地利<b>${ms.dili}</b></div><div>人和<b>${ms.renhe}</b></div></div>`;
   openSheet();
   document.getElementById('btnGo').onclick=()=>commitBattle();
   document.getElementById('btnCancel').onclick=()=>{ pendingBattle=null; closeSheet(); };
@@ -1135,13 +1465,19 @@ function openScenario(){
 }
 function closeScenario(){ document.getElementById('scnSheet').classList.remove('show'); }
 document.getElementById('scnBody').addEventListener('click', e=>{ const b=e.target.closest('button'); if(!b) return; startScenario(b.dataset.id); });
+function renderRes(){
+  const el=document.getElementById('resBar'); if(!el) return;
+  const M=R.ECON?R.ECON.RES_META:null;
+  el.innerHTML = (R.ECON?R.ECON.TYPES:['粮','木','铁','石','币']).map(k=>`<span class="res">${(M&&M[k]?M[k].icon:'·')} <b>${RES[k]||0}</b><span>${k}</span></span>`).join('')
+    + `<span class="res">⚔️ <b>${playerSoldiers}</b><span>兵力</span></span>`;
+}
 function refreshTop(){ let land=0,enemy=0; for(let y=0;y<H;y++)for(let x=0;x<W;x++){ const o=map[y][x].owner; if(o==='player')land++; else if(o!=='none')enemy++; }
   document.getElementById('tLand').textContent='领地'+land;
   document.getElementById('tEnemy').textContent='敌'+enemy;
   document.getElementById('tSeason').textContent=R.SEASON[seasonKey].name;
   document.getElementById('tWeather').textContent=R.WEATHER[weatherKey].name;
   document.getElementById('tTime').textContent='时辰'+time;
-  updateObjective(land);
+  updateObjective(land); renderRes();
 }
 // 目标横幅：依剧本胜利条件显示进度
 function updateObjective(land){
@@ -1183,6 +1519,9 @@ document.getElementById('btnTime').onclick=()=>{
   aiTurn();
   // 剧本事件触发（每个事件仅触发一次）
   R.eventsDueAt(SCN,time).forEach(ev=>{ if(appliedEvents[ev.at]) return; appliedEvents[ev.at]=true; applyEvent(ev); });
+  // 资源产出：领地/城池 → 粮木铁石币（随季节）
+  if(R.ECON){ const land=landCount('player'); let cities=0; for(let y=0;y<H;y++)for(let x=0;x<W;x++){ if(map[y][x].owner==='player'&&map[y][x].t==='city') cities++; }
+    const gain=R.ECON.perTurn(land,cities,R.SEASON[seasonKey].grain); for(const k in gain) RES[k]=(RES[k]||0)+gain[k]; }
   refreshTop(); checkEnd(); render(); updateWeatherAnim();
   toast(`进入【${R.SEASON[seasonKey].name}】· 天气【${R.WEATHER[weatherKey].name}】· 诸侯已行动`);
   log('📊 势力：'+standings());
@@ -1193,6 +1532,14 @@ document.getElementById('btnDiplomacy').onclick=function(){ diplomacyMode=!diplo
 document.getElementById('btnScenario').onclick=function(){ openScenario(); closeDiplomacy(); };
 document.getElementById('btnReload').onclick=async function(){ try{ await R.loadConfigFromServer('data/'); refreshDataRefs(); buildLegend(); refreshTop(); render(); toast('配表已重载，数值即时生效'); }catch(e){ toast('配表重载失败（请用 http 服务运行）：'+e.message); } };
 document.getElementById('btnReset').onclick=()=>{ genMap(); buildLegend(); toast('地图已重置'); };
+document.getElementById('btnRecruit').onclick=function(){
+  if(!R.ECON) return;
+  const add=600; const cost=R.ECON.recruitCost(add);
+  if((RES['粮']||0) < cost['粮']){ toast('粮草不足，无法征兵（需'+cost['粮']+'粮）'); return; }
+  RES['粮']-=cost['粮']; if(cost['币']) RES['币']=Math.max(0,(RES['币']||0)-cost['币']);
+  playerSoldiers=Math.min(3000, playerSoldiers+add);
+  renderRes(); toast('⚔️ 征兵 +'+add+'（现 '+playerSoldiers+'/队）');
+};
 
 // 缩放按钮（双指捏合之外的备用入口）
 document.getElementById('btnZoomIn').onclick=()=>{ zoom=clampZoom(zoom*1.25); clampCam(); render(); };

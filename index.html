@@ -525,7 +525,8 @@ function previewBattle(x,y){
   if(ambushSrc) ambushSrc.ambush=false;   // 伏兵发动或暴露后清除
   const ms=R.miaoSuan({weather:weatherKey,attTerrain:'plain',defTerrain:c.t,attMorale:85,leadAvg:92});
   const att=ROSTER.slice(0,3).map((id,i)=>R.makeUnit(id,playerSoldiers,i===0?'fengshi':(i===1?'heyi':'yulin'),{morale:85}));
-  pendingBattle={x,y,ambush,ambushFailed,att,def:defenderArmy(c).units,ms,c,lvl};
+  const def=defenderArmy(c).units;
+  pendingBattle={x,y,ambush,ambushFailed,att,def,ms,c,lvl};
   const win = ms.winProb>=55, tie = ms.winProb>=40;
   const odds = win?'胜算较大':(tie?'胜负难料':'凶多吉少');
   const troopName = t => (R.TROOPS[t] ? R.TROOPS[t].name : t);
