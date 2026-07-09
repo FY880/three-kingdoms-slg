@@ -1085,6 +1085,8 @@ const LORD_BY_ID={};
 const ROSTER=['cao1','guan1','zhao1','zhu1','zhou1'];
 // 养成系统（Demo 级状态）：战法书库存 / 已拆解标记 / 宝物装备映射(将→宝物id) / 城建等级
 let skillBooks=[], dismantled={}, equippedTreasures={}, cityLevel=0;
+// 出战名单：ROSTER 中未被拆解消耗的武将（拆解即从出战名单移除，且不再出现在养成面板）
+function activeRoster(){ return ROSTER.filter(id=>!dismantled[id]); }
 function isAI(o){ return o&&o.startsWith('ai_'); }
 function lordById(o){ return LORD_BY_ID[o]; }
 
@@ -1142,7 +1144,7 @@ function defenderArmy(tile){
   // 我方守军享受宝物与城建加成；敌方/中立不享受玩家宝物与城建
   const trFor = id => (tile.owner==='player' && equippedTreasures[id]) ? [R.TREASURES[equippedTreasures[id]]].filter(Boolean) : [];
   const cityMul = tile.owner==='player' ? (1 + 0.02*cityLevel) : 1;
-  if(tile.owner==='player'){ const u=ROSTER.slice(0,3).map((id,i)=>R.makeUnit(id,playerSoldiers,i===0?'fengshi':(i===1?'heyi':'yulin'),{morale:85, treasures:trFor(id), cityBonus:cityMul})); return {units:u,total:playerSoldiers*3}; }
+  if(tile.owner==='player'){ const u=activeRoster().slice(0,3).map((id,i)=>R.makeUnit(id,playerSoldiers,i===0?'fengshi':(i===1?'heyi':'yulin'),{morale:85, treasures:trFor(id), cityBonus:cityMul})); return {units:u,total:playerSoldiers*Math.min(3,activeRoster().length)}; }
   if(isAI(tile.owner)){ const L=lordById(tile.owner); const u=L.gen.map((id,i)=>R.makeUnit(id,L.strength,i===0?'fengshi':'heyi',{morale:80, treasures:trFor(id), cityBonus:cityMul})); return {units:u,total:L.strength*3}; }
   const pool=['lv1','zhang1','huang1','sun1','sima1','liu1'];
   const n=Math.min(3,1+Math.floor(tile.lvl/2)); const u=[];
@@ -1431,7 +1433,7 @@ function previewBattle(x,y){
   const ambushFailed = !!ambushSrc && !det;
   if(ambushSrc) ambushSrc.ambush=false;   // 伏兵发动或暴露后清除
   const ms=R.miaoSuan({weather:weatherKey,attTerrain:'plain',defTerrain:c.t,attMorale:85,leadAvg:92});
-  const att=ROSTER.slice(0,3).map((id,i)=>{
+  const att=activeRoster().slice(0,3).map((id,i)=>{
     const trId=equippedTreasures[id];
     const treasures = trId ? [R.TREASURES[trId]].filter(Boolean) : [];
     return R.makeUnit(id,playerSoldiers,i===0?'fengshi':(i===1?'heyi':'yulin'),{morale:85, treasures, cityBonus: 1 + 0.02*cityLevel});
@@ -1554,9 +1556,10 @@ function openTrain(){ renderTrain(); document.getElementById('trainSheet').class
 function renderTrain(){
   const el=document.getElementById('trainBody');
   if(!el) return;
+  const R0=activeRoster();   // 已拆解消耗的武将不再出现在养成面板
   const gName=id=>{ const g=DATA.state.GENERALS.find(x=>x.id===id); return g?g.name:id; };
   // 1) 战法拆解（自带战法 skills[0]）
-  const disRows=ROSTER.map(id=>{
+  const disRows=R0.map(id=>{
     const g=DATA.state.GENERALS.find(x=>x.id===id);
     const own=g.skills[0]; const skName=R.SKILLS[own]?R.SKILLS[own].name:own;
     const done=dismantled[g.id];
@@ -1569,12 +1572,12 @@ function renderTrain(){
   else {
     booksHtml=skillBooks.map(sid=>{
       const sk=R.SKILLS[sid]; if(!sk) return '';
-      const targets=ROSTER.filter(tid=>{ const g=DATA.state.GENERALS.find(x=>x.id===tid); return g.skills.length<3 && !g.skills.includes(sid); });
+      const targets=R0.filter(tid=>{ const g=DATA.state.GENERALS.find(x=>x.id===tid); return g.skills.length<3 && !g.skills.includes(sid); });
       const btns=targets.map(tid=>`<button data-act="equip" data-sid="${sid}" data-tid="${tid}">装给${gName(tid)}</button>`).join('') || '<span class="dipNote">无可装配武将</span>';
       return `<div class="dipRow"><div class="dipTitle"><b>${sk.name}</b> <span class="tag">${sk.type}</span></div><div class="dipBtns">${btns}</div></div>`;
     }).join('');
   }
-  const equipRows=ROSTER.map(id=>{
+  const equipRows=R0.map(id=>{
     const g=DATA.state.GENERALS.find(x=>x.id===id);
     if(g.skills.length<=1) return '';
     const extra=g.skills.slice(1).map((sid,i)=>{ const sk=R.SKILLS[sid]; const realIdx=i+1;
@@ -1585,13 +1588,13 @@ function renderTrain(){
   const trKeys=Object.keys(R.TREASURES);
   const trRows=(trKeys.length?trKeys.map(id=>{
     const t=R.TREASURES[id];
-    const targets=ROSTER.map(tid=>`<button data-act="equipTr" data-tid="${tid}" data-tr="${id}">${gName(tid)}</button>`).join('');
+    const targets=R0.map(tid=>`<button data-act="equipTr" data-tid="${tid}" data-tr="${id}">${gName(tid)}</button>`).join('');
     const eq=Object.keys(equippedTreasures).find(k=>equippedTreasures[k]===id);
     const eqTag=eq?` <span class="tag">已装备:${gName(eq)}</span>`:'';
     return `<div class="dipRow"><div class="dipTitle"><b>${t.name}</b> <span class="tag">${t.slot}</span> <span class="tag">+${(t.bonusPct*100).toFixed(0)}% ${t.stat}</span>${eqTag}</div><div class="dipBtns">${targets}</div></div>`;
   }).join(''):'<div class="dipNote">暂无宝物（检查 treasures.csv 是否载入）。</div>');
   // 3) 升战法 / 城建
-  const upRows=ROSTER.map(id=>{
+  const upRows=R0.map(id=>{
     const g=DATA.state.GENERALS.find(x=>x.id===id);
     const cost=R.ECON.upgradeSkillCost(g.level);
     const can=g.level<15;
@@ -1617,9 +1620,10 @@ document.getElementById('trainBody').addEventListener('click', e=>{
   if(act==='dismantle'){
     const g=DATA.state.GENERALS.find(x=>x.id===b.dataset.id);
     if(dismantled[g.id]) return;
-    const sid=g.skills[0];
-    skillBooks.push(sid); dismantled[g.id]=true;
-    toast(`拆解【${g.name}】自带战法「${R.SKILLS[sid]?R.SKILLS[sid].name:sid}」入库`); renderTrain();
+    g.skills.forEach(sid=>skillBooks.push(sid));   // 自带+原生+已装配战法全部入库/退回（武将消耗）
+    dismantled[g.id]=true;
+    delete equippedTreasures[g.id];                // 宝物随武将消耗释放，可改装备他人
+    toast(`拆解【${g.name}】并将其 ${g.skills.length} 个战法入库（武将已消耗，退出出战名单）`); renderTrain();
   } else if(act==='equip'){
     const tid=b.dataset.tid, sid=b.dataset.sid;
     const g=DATA.state.GENERALS.find(x=>x.id===tid);
