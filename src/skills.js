@@ -13,9 +13,10 @@
 })(typeof self !== 'undefined' ? self : this, function (DATA) {
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
-  // 取武将的全部战法对象
+  // 取武将的全部战法对象（残卷战法带 weak 标记，由 DATA.state.WEAK[generalId] 决定）
   function skillList(g) {
-    return (g.skills || []).map(id => DATA.state.SKILLS[id]).filter(Boolean);
+    const weak = (DATA.state.WEAK && g.id && DATA.state.WEAK[g.id]) || {};
+    return (g.skills || []).map(id => { const sk = DATA.state.SKILLS[id]; if (!sk) return null; return weak[id] ? Object.assign({}, sk, { weak: true }) : sk; }).filter(Boolean);
   }
 
   // 发动率：基础 + 属性差 + 阵营羁绊加成
@@ -42,11 +43,12 @@
   // 开场：指挥战法加成 + 被动常驻标记
   function commandSetup(unit, army, log) {
     for (const sk of skillList(unit.g)) {
+      const wk = sk.weak ? 0.9 : 1;   // 残卷战法效果 ×0.9
       if (sk.type === '指挥') {
         army.forEach(u => {
           if (!u.alive) return;
-          if (sk.buffAtkPct) u.atkMul  *= (1 + sk.buffAtkPct);
-          if (sk.buffDefPct) u.defMul  *= (1 + sk.buffDefPct);
+          if (sk.buffAtkPct) u.atkMul  *= (1 + sk.buffAtkPct * wk);
+          if (sk.buffDefPct) u.defMul  *= (1 + sk.buffDefPct * wk);
           if (sk.buffMorale) u.morale   = clamp(u.morale + sk.buffMorale * 20, 20, 100);
         });
         log.push(`📜 ${unit.g.name} 施【${sk.name}】· 全军 ${sk.desc}`);
@@ -57,8 +59,8 @@
           unit.emptyFort = true;
           log.push(`🛡 ${unit.g.name} 常驻【${sk.name}】· 残血时触发（空城计）`);
         } else {
-          if (sk.buffDefPct) unit.defMul *= (1 + sk.buffDefPct);
-          if (sk.debuffAtkPct) army.forEach(en => en.alive && (en.foeHitDown = (en.foeHitDown || 0) + sk.debuffAtkPct));
+          if (sk.buffDefPct) unit.defMul *= (1 + sk.buffDefPct * wk);
+          if (sk.debuffAtkPct) army.forEach(en => en.alive && (en.foeHitDown = (en.foeHitDown || 0) + sk.debuffAtkPct * wk));
         }
         if (sk.healPct) unit.regenPct = (unit.regenPct || 0) + sk.healPct;
         if (sk.buffMorale) unit.regenMorale = (unit.regenMorale || 0) + sk.buffMorale;
@@ -82,31 +84,32 @@
 
   // 主动/追击战法结算
   function cast(skill, caster, allies, foes, env, log) {
+    const wk = skill.weak ? 0.9 : 1;   // 残卷战法效果 ×0.9
     const targets = pickTargets(skill, caster, allies, foes);
     if (!targets.length && skill.target.indexOf('foe') === 0) return;
     if (skill.dmgPct) {
       targets.forEach(t => {
         if (!t.alive) return;
         const mit = (t.defStat * 1) / (t.defStat + 150);
-        const dmg = Math.max(1, Math.round(caster.primary * skill.dmgPct * caster.atkMul * (1 - mit * 0.6)));
+        const dmg = Math.max(1, Math.round(caster.primary * skill.dmgPct * wk * caster.atkMul * (1 - mit * 0.6)));
         t.soldiers -= dmg; if (t.soldiers <= 0) { t.soldiers = 0; t.alive = false; }
         log.push(`  💥 ${caster.g.name}【${skill.name}】→ ${t.g.name} ${skill.dmgSchool}伤害 ${dmg}` + (t.alive ? '' : '（败退）'));
       });
     }
     if (skill.healPct) {
-      targets.forEach(t => { if (!t.alive) return; const h = Math.round((t.max - t.soldiers) * skill.healPct); t.soldiers = Math.min(t.max, t.soldiers + h); if (h > 0) log.push(`  💚 ${caster.g.name}【${skill.name}】疗${t.g.name} +${h}`); });
+      targets.forEach(t => { if (!t.alive) return; const h = Math.round((t.max - t.soldiers) * skill.healPct * wk); t.soldiers = Math.min(t.max, t.soldiers + h); if (h > 0) log.push(`  💚 ${caster.g.name}【${skill.name}】疗${t.g.name} +${h}`); });
     }
     if (skill.buffAtkPct || skill.buffDefPct) {
-      targets.forEach(t => { if (!t.alive) return; if (skill.buffAtkPct) t.atkMul *= (1 + skill.buffAtkPct); if (skill.buffDefPct) t.defMul *= (1 + skill.buffDefPct); });
+      targets.forEach(t => { if (!t.alive) return; if (skill.buffAtkPct) t.atkMul *= (1 + skill.buffAtkPct * wk); if (skill.buffDefPct) t.defMul *= (1 + skill.buffDefPct * wk); });
       log.push(`  ✨ ${caster.g.name}【${skill.name}】增益全军`);
     }
     if (skill.debuffAtkPct || skill.debuffDefPct) {
-      targets.forEach(t => { if (!t.alive) return; if (skill.debuffAtkPct) t.atkMul *= (1 + skill.debuffAtkPct); if (skill.debuffDefPct) t.defMul *= (1 + skill.debuffDefPct); });
+      targets.forEach(t => { if (!t.alive) return; if (skill.debuffAtkPct) t.atkMul *= (1 + skill.debuffAtkPct * wk); if (skill.debuffDefPct) t.defMul *= (1 + skill.debuffDefPct * wk); });
       log.push(`  📉 ${caster.g.name}【${skill.name}】削敌`);
     }
     if (skill.ctrl) targets.forEach(t => applyControl(t, skill, log));
-    if (skill.dotPct) targets.forEach(t => { if (t.alive) t.dots.push({ pct: skill.dotPct, school: skill.dotSchool, turns: skill.duration || 2 }); });
-    if (skill.stealPct) targets.forEach(t => { if (!t.alive) return; t.atkMul *= (1 - skill.stealPct); caster.atkMul *= (1 + skill.stealPct); });
+    if (skill.dotPct) targets.forEach(t => { if (t.alive) t.dots.push({ pct: skill.dotPct * wk, school: skill.dotSchool, turns: skill.duration || 2 }); });
+    if (skill.stealPct) targets.forEach(t => { if (!t.alive) return; t.atkMul *= (1 - skill.stealPct * wk); caster.atkMul *= (1 + skill.stealPct * wk); });
     if (skill.reflect) { caster.reflectNext = true; log.push(`  🪞 ${caster.g.name}【${skill.name}】反弹就绪`); }
   }
 

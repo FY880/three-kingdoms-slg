@@ -12,6 +12,9 @@
   #top { display:flex; gap:6px; padding:6px 8px; background:#23282f; align-items:center; flex-wrap:wrap; }
   #top b { font-size:14px; margin-right:2px; }
   .tag { background:#3a414b; padding:3px 8px; border-radius:10px; font-size:12px; white-space:nowrap; }
+  .tag.on { background:#2f7d4f; }
+  .tag.off { background:#5a4a32; }
+  .tag.weak { background:#8a5a2f; color:#ffd9a8; }
   #mapWrap { position:relative; flex:1; overflow:hidden; }
   canvas { display:block; width:100%; height:100%; background:#0e1116; touch-action:none; }
   #bottombar { display:flex; gap:6px; padding:8px; background:#23282f; padding-bottom:calc(8px + env(safe-area-inset-bottom)); }
@@ -198,6 +201,7 @@ const LORD_BY_ID={};
 const ROSTER=['cao1','guan1','zhao1','zhu1','zhou1'];
 // 养成系统（Demo 级状态）：战法书库存 / 已拆解标记 / 宝物装备映射(将→宝物id) / 城建等级
 let skillBooks=[], dismantled={}, equippedTreasures={}, cityLevel=0;
+let allow4Star=false;   // 4★ 残卷拆解开关（默认关闭，见 M1 设计文档 §1.2）
 // 出战名单：ROSTER 中未被拆解消耗的武将（拆解即从出战名单移除，且不再出现在养成面板）
 function activeRoster(){ return ROSTER.filter(id=>!dismantled[id]); }
 function isAI(o){ return o&&o.startsWith('ai_'); }
@@ -671,23 +675,31 @@ function renderTrain(){
   if(!el) return;
   const R0=activeRoster();   // 已拆解消耗的武将不再出现在养成面板
   const gName=id=>{ const g=DATA.state.GENERALS.find(x=>x.id===id); return g?g.name:id; };
-  // 1) 战法拆解（自带战法 skills[0]）
+  // 1) 战法拆解（自带战法 skills[0]）—— 4★ 仅在「残卷拆解」开启时可拆
   const disRows=R0.map(id=>{
     const g=DATA.state.GENERALS.find(x=>x.id===id);
     const own=g.skills[0]; const skName=R.SKILLS[own]?R.SKILLS[own].name:own;
     const done=dismantled[g.id];
-    return `<div class="dipRow"><div class="dipTitle"><b>${g.name}</b> <span class="tag">自带 ${skName}</span>${done?' <span class="tag">已拆</span>':''}</div>`
-      +`<div class="dipBtns"><button data-act="dismantle" data-id="${g.id}" ${done?'disabled':''}>拆解自带战法</button></div></div>`;
+    const is4=(g.star||5)<5;
+    const canDis=!is4||allow4Star;
+    const btn = done ? `<button disabled data-act="dismantle" data-id="${g.id}">已拆解</button>`
+      : canDis ? `<button data-act="dismantle" data-id="${g.id}">拆解自带战法</button>`
+      : `<button disabled data-act="dismantle" data-id="${g.id}" title="需先在上方开启「残卷拆解」">4★拆解（需开启残卷拆解）</button>`;
+    return `<div class="dipRow"><div class="dipTitle"><b>${g.name}</b> <span class="tag">自带 ${skName}</span>${is4?' <span class="tag">4★</span>':''}${done?' <span class="tag">已拆</span>':''}</div>`
+      +`<div class="dipBtns">${btn}</div></div>`;
   }).join('');
+  // 残卷拆解开关行
+  const fourStarRow=`<div class="dipRow"><div class="dipTitle"><b>残卷拆解开关</b> <span class="tag ${allow4Star?'on':'off'}">${allow4Star?'已开启':'已关闭'}</span> ${allow4Star?'4★ 拆解产出「残卷」战法书（装配效果 ×0.9）':'4★ 武将暂不可拆解，点右侧开启'}</div>`
+    +`<div class="dipBtns"><button data-act="toggle4">${allow4Star?'关闭':'开启'}残卷拆解</button></div></div>`;
   // 1) 战法书库存 + 装配 + 已装配（可卸下）
   let booksHtml;
   if(!skillBooks.length){ booksHtml='<div class="dipNote">暂无战法书。先拆解武将自带战法获得战法书（每将仅可拆一次）。</div>'; }
   else {
-    booksHtml=skillBooks.map(sid=>{
-      const sk=R.SKILLS[sid]; if(!sk) return '';
+    booksHtml=skillBooks.map(b=>{
+      const sid=b.sid; const sk=R.SKILLS[sid]; if(!sk) return '';
       const targets=R0.filter(tid=>{ const g=DATA.state.GENERALS.find(x=>x.id===tid); return g.skills.length<3 && !g.skills.includes(sid); });
       const btns=targets.map(tid=>`<button data-act="equip" data-sid="${sid}" data-tid="${tid}">装给${gName(tid)}</button>`).join('') || '<span class="dipNote">无可装配武将</span>';
-      return `<div class="dipRow"><div class="dipTitle"><b>${sk.name}</b> <span class="tag">${sk.type}</span></div><div class="dipBtns">${btns}</div></div>`;
+      return `<div class="dipRow"><div class="dipTitle"><b>${sk.name}</b> <span class="tag">${sk.type}</span>${b.weak?' <span class="tag weak">残卷·×0.9</span>':''}</div><div class="dipBtns">${btns}</div></div>`;
     }).join('');
   }
   const equipRows=R0.map(id=>{
@@ -720,7 +732,7 @@ function renderTrain(){
   const affordCity=(RES['木']||0)>=cc['木']&&(RES['铁']||0)>=cc['铁']&&(RES['石']||0)>=cc['石']&&(RES['币']||0)>=cc['币'];
   const cityRow=`<div class="dipRow"><div class="dipTitle"><b>城建</b> Lv${cityLevel}（全军攻/防 +${(cityLevel*2)}%，资源产出 +${(cityLevel*5)}%）</div>`
     +`<div class="dipBtns"><button data-act="city" ${canCity&&affordCity?'':'disabled'}>升级城建→${cityLevel+1}（木${cc['木']}/铁${cc['铁']}/石${cc['石']}/币${cc['币']}）</button></div></div>`;
-  el.innerHTML=`<h3>① 战法拆解 / 装配</h3>`+disRows
+  el.innerHTML=`<h3>① 战法拆解 / 装配</h3>`+fourStarRow+disRows
     +`<h3>② 战法书库存（${skillBooks.length}）</h3>`+booksHtml
     +(equipRows?`<h3>③ 已装配（可卸下，退回战法书）</h3>`+equipRows:'')
     +`<h3>④ 宝物装备（每将1件，可替换）</h3>`+trRows
@@ -730,21 +742,35 @@ function renderTrain(){
 document.getElementById('trainBody').addEventListener('click', e=>{
   const b=e.target.closest('button'); if(!b||b.disabled) return;
   const act=b.dataset.act;
+  if(act==='toggle4'){
+    allow4Star=!allow4Star;
+    toast(allow4Star?'已开启「残卷拆解」：4★ 武将可拆解，产出残卷战法书（装配效果 ×0.9）':'已关闭「残卷拆解」：4★ 武将暂不可拆解');
+    renderTrain(); return;
+  }
   if(act==='dismantle'){
     const g=DATA.state.GENERALS.find(x=>x.id===b.dataset.id);
     if(dismantled[g.id]) return;
-    g.skills.forEach(sid=>skillBooks.push(sid));   // 自带+原生+已装配战法全部入库/退回（武将消耗）
+    const weak=(g.star||5)<5;   // 4★ 拆解产出「残卷」战法书（装配效果 ×0.9）
+    g.skills.forEach(sid=>skillBooks.push({sid, weak}));   // 自带+原生+已装配战法全部入库/退回（武将消耗）
     dismantled[g.id]=true;
     delete equippedTreasures[g.id];                // 宝物随武将消耗释放，可改装备他人
-    toast(`拆解【${g.name}】并将其 ${g.skills.length} 个战法入库（武将已消耗，退出出战名单）`); renderTrain();
+    toast(`拆解【${g.name}】并将其 ${g.skills.length} 个战法入库（${weak?'残卷·效果×0.9，':''}武将已消耗）`); renderTrain();
   } else if(act==='equip'){
     const tid=b.dataset.tid, sid=b.dataset.sid;
     const g=DATA.state.GENERALS.find(x=>x.id===tid);
-    if(g.skills.length<3 && !g.skills.includes(sid)){ g.skills.push(sid); const bi=skillBooks.indexOf(sid); if(bi>=0) skillBooks.splice(bi,1); toast(`已装配「${R.SKILLS[sid].name}」给 ${g.name}」（消耗战法书 1 本）`); renderTrain(); renderRes(); }
+    if(g.skills.length<3 && !g.skills.includes(sid)){
+      const bi=skillBooks.findIndex(b=>b.sid===sid);
+      if(bi<0) return;
+      const book=skillBooks[bi];
+      g.skills.push(sid);
+      const W=DATA.state.WEAK; W[g.id]=W[g.id]||{}; W[g.id][sid]=!!book.weak;   // 标记该装配实例为残卷
+      skillBooks.splice(bi,1);
+      toast(`已装配「${R.SKILLS[sid].name}」给 ${g.name}${book.weak?'（残卷·效果×0.9）':'（消耗战法书 1 本）'}`); renderTrain(); renderRes();
+    }
   } else if(act==='unequip'){
     const g=DATA.state.GENERALS.find(x=>x.id===b.dataset.id);
     const idx=parseInt(b.dataset.idx,10);
-    if(idx>0 && idx<g.skills.length){ const sid=g.skills.splice(idx,1)[0]; skillBooks.push(sid); toast(`卸下「${R.SKILLS[sid]?R.SKILLS[sid].name:sid}」退回战法书`); renderTrain(); renderRes(); }
+    if(idx>0 && idx<g.skills.length){ const sid=g.skills.splice(idx,1)[0]; const weak=(DATA.state.WEAK[g.id]&&DATA.state.WEAK[g.id][sid])||false; if(DATA.state.WEAK[g.id]) delete DATA.state.WEAK[g.id][sid]; skillBooks.push({sid, weak}); toast(`卸下「${R.SKILLS[sid]?R.SKILLS[sid].name:sid}」退回战法书${weak?'（残卷）':''}`); renderTrain(); renderRes(); }
   } else if(act==='equipTr'){
     const tid=b.dataset.tid, tr=b.dataset.tr;
     equippedTreasures[tid]=tr; toast(`已将「${R.TREASURES[tr].name}」装备给 ${DATA.state.GENERALS.find(x=>x.id===tid).name}`); renderTrain();

@@ -102,7 +102,9 @@
       weiwu:{name:'魏武雄略',members:['cao1','sima1'],atkPct:0.07,rate:0.05}
     },
     /* —— 宝物（武/谋/防/速/辅；force/intellect/leadership/speed/def） —— */
-    TREASURES: {}
+    TREASURES: {},
+    /* —— 战法书「残卷」标记：generalId -> { skillId: true }（4★ 拆解产出，装配效果 ×0.9） —— */
+    WEAK: {}
   };
 
   // 可变 state：热加载时只重赋值属性，不换对象 → 所有引用保持有效
@@ -116,7 +118,8 @@
     TROOPS:    DEFAULTS.TROOPS,
     FACTIONS:  DEFAULTS.FACTIONS,
     BONDS:     DEFAULTS.BONDS,
-    TREASURES: DEFAULTS.TREASURES
+    TREASURES: DEFAULTS.TREASURES,
+    WEAK:      DEFAULTS.WEAK
   };
 
   /* ---------- CSV 解析 / 转换 ---------- */
