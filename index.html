@@ -21,6 +21,9 @@
   #bottombar button { flex:1; min-height:46px; font-size:14px; border:none; border-radius:8px; color:#fff; background:#3d7bd6; }
   #bottombar button.alt { background:#4a525c; }
   #bottombar button.on { background:#d68a3d; }
+  /* 按钮点击反馈（缩放/弹起过渡） */
+  #bottombar button, #zoomBar button { transition:transform .1s ease, opacity .1s ease; }
+  #bottombar button:active, #zoomBar button:active { transform:scale(.95); opacity:.8; }
   /* 上滑详情面板 */
   #sheet { position:fixed; left:0; right:0; bottom:0; max-height:62%; background:#1c2128; border-top:2px solid #3d7bd6;
     border-radius:14px 14px 0 0; transform:translateY(100%); transition:transform .22s ease; z-index:20; padding:12px 14px calc(14px + env(safe-area-inset-bottom)); overflow:auto; }
@@ -59,6 +62,10 @@
   /* 养成面板 */
   #trainSheet { position:fixed; left:0; right:0; bottom:0; max-height:80%; background:#1c2128; border-top:2px solid #3d7bd6;
     border-radius:14px 14px 0 0; transform:translateY(100%); transition:transform .22s ease; z-index:27; padding:12px 14px calc(14px + env(safe-area-inset-bottom)); overflow:auto; }
+  #taskSheet { position:fixed; left:0; right:0; bottom:0; max-height:70%; background:#1c2128; border-top:2px solid #e8a855;
+    border-radius:14px 14px 0 0; transform:translateY(100%); transition:transform .22s ease; z-index:27; padding:12px 14px calc(14px + env(safe-area-inset-bottom)); overflow:auto; }
+  #achSheet { position:fixed; left:0; right:0; bottom:0; max-height:72%; background:#1c2128; border-top:2px solid #e8a855;
+    border-radius:14px 14px 0 0; transform:translateY(100%); transition:transform .22s ease; z-index:27; padding:12px 14px calc(14px + env(safe-area-inset-bottom)); overflow:auto; }
   #trainSheet.show { transform:translateY(0); }
   #trainSheet h3 { margin:10px 0 6px; font-size:14px; color:#9ec5ff; }
   #trainSheet h3:first-child { margin-top:0; }
@@ -85,6 +92,9 @@
   /* 缩放按钮 */
   #zoomBar{ position:absolute; right:8px; top:8px; display:flex; flex-direction:column; gap:8px; z-index:14; }
   #zoomBar button{ width:42px; height:42px; font-size:22px; line-height:1; border:none; border-radius:10px; background:rgba(35,40,47,.82); color:#fff; }
+  #zoomBar button#btnHome{ font-size:18px; }
+  /* 右下角小地图 */
+  #minimap{ position:absolute; right:52px; bottom:58px; width:120px; height:90px; border-radius:6px; border:1px solid rgba(255,255,255,.25); background:#0e1116; z-index:13; cursor:pointer; }
   /* 首次引导层 */
   #intro{ position:fixed; inset:0; background:rgba(0,0,0,.74); z-index:60; display:flex; align-items:center; justify-content:center; padding:18px; }
   #introCard{ background:#1c2128; border:2px solid #3d7bd6; border-radius:16px; width:100%; max-width:520px; max-height:88%; overflow:auto; padding:18px 18px 16px; }
@@ -107,9 +117,11 @@
   </div>
   <div id="objBar">🎯 目标加载中…</div>
   <div id="resBar"></div>
-  <div id="mapWrap"><canvas id="cv"></canvas><div id="zoomBar"><button id="btnZoomIn">＋</button><button id="btnZoomOut">－</button></div></div>
+  <div id="mapWrap"><canvas id="cv"></canvas><div id="zoomBar"><button id="btnHome" title="回到主城">🏠</button><button id="btnZoomIn">＋</button><button id="btnZoomOut">－</button></div><canvas id="minimap" width="120" height="90"></canvas></div>
   <div id="bottombar">
     <button id="btnTime">推进时辰</button>
+    <button id="btnTask" class="alt">任务</button>
+    <button id="btnAch" class="alt">成就</button>
     <button id="btnAmbush" class="alt">伏兵</button>
     <button id="btnFlood" class="alt">水攻</button>
     <button id="btnDiplomacy" class="alt">外交</button>
@@ -147,6 +159,16 @@
   <button class="close" onclick="closeTrain()">收起</button>
   <h3>养成 · 战法 / 宝物 / 城建</h3>
   <div id="trainBody" style="margin-top:6px"></div>
+</div>
+<div id="taskSheet">
+  <button class="close" onclick="closeTask()">收起</button>
+  <h3>📋 每日任务</h3>
+  <div id="taskBody"></div>
+</div>
+<div id="achSheet">
+  <button class="close" onclick="closeAchievements()">收起</button>
+  <h3>🏆 成就</h3>
+  <div id="achBody"></div>
 </div>
 <div id="intro"><div id="introCard">
   <h2>三国 SLG · 怎么玩</h2>
@@ -212,6 +234,8 @@ let SCN=null;                 // 当前剧本
 let playerHome=[8,50];
 let appliedEvents={};        // 已触发剧本事件（防重复）
 let gameOver=false;          // 本局是否已结束
+let turnCount=0;             // 已推进回合数（结算画面用）
+let stats={battlesWon:0,battlesLost:0};   // 战绩（结算画面用）
 let DIP=null;                // 外交关系（applyScenario 重建）
 const GLYPH={mountain:'山',forest:'林',river:'水',city:'城',swamp:'泽',lowland:'洼',hill:'丘',defile:'峡',desert:'沙',tundra:'雪',bridge:'桥',plain:''};
 // 应用剧本：填充诸侯、重建外交关系、重置信誉
@@ -224,6 +248,177 @@ function applyScenario(id){
   reputation=50; playerHome=SCN.playerHome.slice(); appliedEvents={}; gameOver=false;
   initRelations();
 }
+
+// ---- 武将经验等级系统（P0-7）----
+function initGeneralLevels(){
+  // 为所有武将追加运行时字段（CSV 无此列，首次初始化）
+  DATA.state.GENERALS.forEach(g=>{
+    if(g.xp===undefined) g.xp=0;
+    if(g.level===undefined) g.level=1;
+    if(g.totalXp===undefined) g.totalXp=0;
+  });
+}
+
+// ---- 成就系统（P0-6）----
+const ACHIEVEMENT_DEFS = [
+  { id:'first_blood', cat:'battle', name:'初阵', desc:'赢得第一场战斗', icon:'🩸', reward:{币:100}, check:(s)=>s.battlesWon>=1 },
+  { id:'win_10', cat:'battle', name:'百战', desc:'累计胜利10场', icon:'⚔️', reward:{玉:1}, check:(s)=>s.battlesWon>=10 },
+  { id:'win_streak_3', cat:'battle', name:'连胜', desc:'连续获胜3场', icon:'🔥', reward:{玉:2}, check:(s)=>(s.winStreak||0)>=3 },
+  { id:'land_10', cat:'territory', name:'立足', desc:'拥有10块领土', icon:'🏠', reward:{粮:300}, check:()=>landCount('player')>=10 },
+  { id:'land_50', cat:'territory', name:'一方诸侯', desc:'拥有50块领土', icon:'👑', reward:{玉:3}, check:()=>landCount('player')>=50 },
+  { id:'generals_5', cat:'collect', name:'招贤纳士', desc:'拥有5名武将', icon:'📜', reward:{币:200}, check:()=>activeRoster().length>=5 },
+  { id:'capital_1', cat:'special', name:'攻城略地', desc:'占领第一座州府', icon:'🏰', reward:{玉:2}, check:(s)=>taskCounters.captureCapital },
+  { id:'no_loss_3', cat:'special', name:'兵不血刃', desc:'连续3次出征无败绩', icon:'🛡️', reward:{玉:2}, check:(s)=>(s.noLossStreak||0)>=3 },
+  { id:'speed_win', cat:'special', name:'速战速决', desc:'25回合内达成胜利', icon:'⚡', reward:{玉:5}, check:()=>gameOver&&turnCount<=25 }
+];
+let unlockedAchievements = [];   // 已解锁的成就ID列表
+function landCount(owner){ let n=0; for(let y=0;y<H;y++)for(let x=0;x<W;x++){if(map[y][x].owner===owner)n++;} return n; }
+function checkAchievements(){
+  const newUnlocks = [];
+  ACHIEVEMENT_DEFS.forEach(def=>{
+    if(unlockedAchievements.includes(def.id)) return;
+    try{ if(def.check(stats)){ unlockedAchievements.push(def.id); newUnlocks.push(def); } }catch(e){}
+  });
+  // 新解锁弹通知
+  newUnlocks.forEach(a=>{
+    toast(`🏆 成就解锁：【${a.name}】${a.desc}`);
+    log(`🏆 成就：${a.name} — ${a.desc}`);
+    // 奖励
+    for(const k in a.reward){ RES[k]=(RES[k]||0)+a.reward[k]; }
+    refreshTop();
+  });
+  if(newUnlocks.length) renderAchievements();  // 刷新成就列表显示
+}
+function renderAchievements(){
+  const el=document.getElementById('achBody'); if(!el) return;
+  const cats={battle:'⚔️ 战斗',territory:'🗺️ 领土',collect:'📜 收集',special:'⭐ 特殊'};
+  let html='';
+  Object.entries(cats).forEach(([catKey,catName])=>{
+    const items=ACHIEVEMENT_DEFS.filter(d=>d.cat===catKey);
+    html+=`<div style="margin-top:12px;"><b style="font-size:13px;color:#9ec5ff;">${catName}</b></div>`;
+    items.forEach(d=>{
+      const done=unlockedAchievements.includes(d.id);
+      const rText=Object.entries(d.reward).map(([v,n])=>n+v).join(' ');
+      html+=`<div style="background:${done?'#1e2628':'#23282f'};border-radius:6px;padding:8px 10px;margin-bottom:4px;display:flex;align-items:center;gap:8px;">
+        <span style="font-size:20px;">${done?d.icon:'🔒'}</span>
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;justify-content:space-between;"><b style="font-size:12px;color:${done?'#ffd479':'#888'}">${done?d.name:'???'}</b><span style="font-size:10px;color:#666;">${rText}</span></div>
+          <div style="font-size:11px;color:${done?'#999':'#555'}">${done?d.desc:'???'}</div>
+        </div>
+      </div>`;
+    });
+  });
+  const total=ACHIEVEMENT_DEFS.length, done=unlockedAchievements.length;
+  html=`<div style="text-align:right;font-size:11px;color:#888;margin-bottom:4px;">解锁 ${done}/${total}</div>`+html;
+  el.innerHTML=html;
+}
+let achOpen=false;
+function openAchievements(){ achOpen=true; renderAchievements(); const el=document.getElementById('achSheet'); if(el){el.style.transform='translateY(0)';} closeTask(); closeTrain(); closeDiplomacy(); closeScenario(); }
+function closeAchievements(){ achOpen=false; const el=document.getElementById('achSheet'); if(el){el.style.transform='translateY(100%)';} }
+
+function xpForLevel(lvl){ return Math.floor(50*Math.pow(1.3,lvl-1)); }
+function xpToNext(g){ const next=xpForLevel(g.level+1); return Math.max(0,next-g.xp); }
+function addGeneralXP(id,amount){
+  const g=DATA.state.GENERALS.find(x=>x.id===id); if(!g) return;
+  g.xp+=amount; g.totalXp+=amount;
+  // 检查升级（可能连升多级）
+  let leveled=false;
+  while(g.xp>=xpForLevel(g.level+1)&&g.level<30){
+    g.xp-=xpForLevel(g.level+1);
+    g.level++;
+    leveled=true;
+    toast(`🎉 ${g.name} 升级！Lv.${g.level-1}→${g.level}`);
+    log(`⬆️ ${g.name} 升至 Lv.${g.level}`);
+  }
+  if(leveled) renderTrain(); // 刷新养成面板显示新等级
+}
+function awardBattleXP(win, targetLandLvl){
+  // 给出战的前3名武将奖励经验
+  const roster = activeRoster().slice(0,3);
+  const baseXP = win ? 30 : 10;
+  const landBonus = 1 + targetLandLvl * 0.1;
+  roster.forEach(id=>addGeneralXP(id,Math.round(baseXP*landBonus)));
+}
+
+// ---- 日常任务系统（P0-5）----
+const TASK_TEMPLATES = [
+  { id:'attack', name:'主动出击', desc:'发动X次出征', target:3, icon:'⚔️', reward:{粮:200,币:50} },
+  { id:'expand', name:'开疆拓土', desc:'占领X块新领土', target:2, icon:'🗺️', reward:{木:150,铁:80} },
+  { id:'time', name:'时光流转', desc:'推进时辰X次', target:5, icon:'⏰', reward:{石:100,币:30} },
+  { id:'rich', name:'富国强兵', desc:'单回合资源总产出达X', target:800, icon:'💰', reward:{玉:1}, type:'threshold' },
+  { id:'capital', name:'州府之志', desc:'占领州府', target:1, icon:'🏛️', reward:{币:200}, type:'flag' }
+];
+let DAILY_TASKS = { date:'', tasks:[], completed:[], claimed:[] };
+let taskCounters = { attackCount:0, newLandCount:0, turnCount:0, turnProduction:0, captureCapital:false };
+function getTodayStr(){ const d=new Date(); return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); }
+function initDailyTasks(){
+  const today = getTodayStr();
+  if(DAILY_TASKS.date === today) return; // 已初始化过
+  DAILY_TASKS = { date:today, tasks:[], completed:[], claimed:[] };
+  taskCounters = { attackCount:0, newLandCount:0, turnCount:0, turnProduction:0, captureCapital:false };
+  TASK_TEMPLATES.forEach((t,i)=>{ DAILY_TASKS.tasks.push({...t, idx:i, progress:0}); });
+}
+function updateTaskProgress(){
+  if(!DAILY_TASKS.tasks.length) return;
+  DAILY_TASKS.tasks.forEach(t=>{
+    if(DAILY_TASKS.completed.includes(t.idx)) return;
+    if(t.id==='attack') t.progress = Math.min(taskCounters.attackCount, t.target);
+    else if(t.id==='expand') t.progress = Math.min(taskCounters.newLandCount, t.target);
+    else if(t.id==='time') t.progress = Math.min(taskCounters.turnCount, t.target);
+    else if(t.id==='rich') t.progress = Math.min(taskCounters.turnProduction, t.target);
+    else if(t.id==='capital') t.progress = taskCounters.captureCapital ? 1 : 0;
+    if(t.progress >= t.target && !DAILY_TASKS.completed.includes(t.idx)) DAILY_TASKS.completed.push(t.idx);
+  });
+}
+function claimTaskReward(idx){
+  if(!DAILY_TASKS.completed.includes(idx)||DAILY_TASKS.claimed.includes(idx)) return;
+  const t=DAILY_TASKS.tasks[idx];
+  DAILY_TASKS.claimed.push(idx);
+  for(const k in t.reward){ RES[k]=(RES[k]||0)+t.reward[k]; }
+  refreshTop(); renderTasks();
+  toast('🎁 任务奖励：'+Object.entries(t.reward).map(([v,n])=>n+v).join(' '));
+}
+function renderTasks(){
+  const body=document.getElementById('taskBody'); if(!body) return;
+  if(DAILY_TASKS.tasks.length===0){
+    body.innerHTML='<div style="color:#888;font-size:13px;text-align:center;padding:20px">任务加载中...</div>'; return;
+  }
+  let allDone = DAILY_TASKS.tasks.length>0 && DAILY_TASKS.completed.length===DAILY_TASKS.tasks.length && DAILY_TASKS.claimed.length===DAILY_TASKS.tasks.length;
+  let html='';
+  if(allDone){ html='<div style="text-align:center;padding:16px;color:#7CFC8A;font-size:15px;">🎉 今日任务已全部完成！</div>'; }
+  else{
+    html+='<div style="font-size:11px;color:#888;margin-bottom:8px;">每日刷新 · 完成任务领取奖励</div>';
+    DAILY_TASKS.tasks.forEach(t=>{
+      const done=DAILY_TASKS.completed.includes(t.idx), claimed=DAILY_TASKS.claimed.includes(t.idx);
+      const pct=Math.min(100,Math.round(t.progress/t.target*100));
+      const barColor=claimed?'#555':(done?'#e8a855':'#3d7bd6');
+      html+=`<div class="taskRow" style="background:#23282f;border-radius:8px;padding:10px;margin-bottom:6px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:20px;">${t.icon}</span>
+          <div style="flex:1;min-width:0;">
+            <div style="display:flex;justify-content:space-between;"><b style="font-size:13px;color:${claimed?'#666':'#e0e6ed'}">${t.name}${claimed?' ✅':''}</b><span style="font-size:11px;color:${done?'#ffd479':'#888'}">${t.progress}/${t.target}</span></div>
+            <div style="background:#181c22;border-radius:4px;height:6px;margin-top:4px;overflow:hidden;"><div style="width:${pct}%;height:100%;background:${barColor};border-radius:4px;transition:width .3s;"></div></div>
+            <div style="font-size:11px;color:#777;margin-top:3px;">${t.desc}</div>
+          </div>
+        </div>`;
+      if(done&&!claimed){
+        const rText=Object.entries(t.reward).map(([v,n])=>n+v).join(' ');
+        html+=`<button onclick="claimTaskReward(${t.idx})" style="margin-top:6px;width:100%;min-height:34px;border:none;border-radius:6px;background:#e8a855;color:#111;font-size:13px;font-weight:bold;">领取奖励 (${rText})</button>`;
+      } else if(claimed){
+        html+=`<div style="margin-top:4px;font-size:11px;color:#555;">已领取：${Object.entries(t.reward).map(([v,n])=>n+v).join(' ')}</div>`;
+      }
+      html+='</div>';
+    });
+  }
+  // 显示今日完成度
+  const nTotal=DAILY_TASKS.tasks.length, nDone=DAILY_TASKS.claimed.length;
+  if(nTotal>0) html=`<div style="text-align:right;font-size:11px;color:#888;margin-bottom:8px;">进度 ${nDone}/${nTotal}</div>`+html;
+  body.innerHTML=html;
+}
+let taskSheetOpen=false;
+function openTask(){ taskSheetOpen=true; renderTasks(); const el=document.getElementById('taskSheet'); if(el) el.style.transform='translateY(0)'; closeTrain(); closeDiplomacy(); closeScenario(); }
+function closeTask(){ taskSheetOpen=false; const el=document.getElementById('taskSheet'); if(el) el.style.transform='translateY(100%)'; }
+
 // 自动适配视口：开局后计算玩家领土包围盒，自动设 zoom 让领地居中且填满屏幕 ~78%
 function autoFitView(){
   let minX=W, maxX=0, minY=H, maxY=0;
@@ -245,7 +440,7 @@ function autoFitView(){
   camX=cx*CS*zoom-VW()/2; camY=cy*CS*zoom-VH()/2;
   clampCam();
 }
-function startScenario(id){ applyScenario(id); genMap(); buildLegend(); autoFitView(); refreshTop(); render(); closeScenario(); toast('剧本【'+SCN.name+'】'+SCN.desc); log('📜 剧本【'+SCN.name+'】'+SCN.desc); }
+function startScenario(id){ applyScenario(id); genMap(); buildLegend(); autoFitView(); initDailyTasks(); initGeneralLevels(); refreshTop(); render(); closeScenario(); toast('剧本【'+SCN.name+'】'+SCN.desc); log('📜 剧本【'+SCN.name+'】'+SCN.desc); }
 // 调试/测试访问器：返回内部状态引用（供冒烟测试与调试，不影响玩法）
 function getState(){ return {map, SCN, playerHome, DIP, gameOver, AI_LORDS, appliedEvents}; }
 
@@ -370,6 +565,7 @@ function aiTurn(){
 }
 function genMap(){
   seed=12345; time=0; seasonKey='spring'; weatherKey='sun'; appliedEvents={}; gameOver=false; map=[];
+  turnCount=0; stats={battlesWon:0,battlesLost:0};
   for(let y=0;y<H;y++){ const row=[]; for(let x=0;x<W;x++){
     let t='plain'; const r=rnd();
     if(r<0.12)t='mountain'; else if(r<0.22)t='forest'; else if(r<0.30)t='hill';
@@ -480,17 +676,69 @@ function render(){
     if(c.ambush&&c.owner==='player'){ ctx.fillStyle='#ffd479'; ctx.fillRect(px+cw/2-2,py+ch/2-2,4,4); }
     if(c.upstream){ ctx.fillStyle='#7fd6ff'; ctx.font=Math.floor(cw*0.5)+'px sans-serif'; ctx.fillText('水',px+2,py+ch-3); }
     if(c.t==='city'){ ctx.fillStyle='#222'; ctx.font=Math.floor(cw*0.6)+'px sans-serif'; ctx.textAlign='center'; ctx.fillText('城',px+cw/2,py+ch*0.62); ctx.textAlign='left'; }
+    // 选中格呼吸高亮
+    if(selectedCell && x===selectedCell.x && y===selectedCell.y){
+      const pulse = 0.3 + 0.2*Math.sin(Date.now()/300);
+      ctx.strokeStyle=`rgba(255,212,121,${pulse})`; ctx.lineWidth=2;
+      ctx.strokeRect(px+1,py+1,cw-2,ch-2);
+    }
   }
   if(!ambushMode&&!floodMode&&cs>=10){ ctx.strokeStyle='rgba(255,212,121,.9)'; ctx.lineWidth=1;
     for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){ if(validTarget(x,y)){ const xL=Math.round(x*CS*zoom-camX), xR=Math.round((x+1)*CS*zoom-camX), yT=Math.round(y*CS*zoom-camY), yB=Math.round((y+1)*CS*zoom-camY); ctx.strokeRect(xL+1,yT+1,(xR-xL)-2,(yB-yT)-2); } } }
   drawFx();
+  drawFloatTexts();
   ctx.restore();
   drawWeather();
+  drawMinimap();
 }
+// 右下角小地图：全图势力缩略 + 视口框 + 主城/州府点；点击可跳转
+function drawMinimap(){
+  const mm=document.getElementById('minimap');
+  if(!mm) return;
+  if(zoom>=2.5){ mm.style.display='none'; return; }   // 放大到一定程度后小地图意义不大，隐藏
+  mm.style.display='block';
+  const g=mm.getContext('2d');
+  const MW=mm.width, MH=mm.height, cw=MW/W, ch=MH/H;
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const c=map[y][x];
+    let col;
+    if(c.owner==='player') col='rgba(60,130,220,.8)';
+    else if(c.owner!=='none'){ const L=lordById(c.owner); col=L?L.color:'#1a1f26'; }
+    else col='#1a1f26';
+    g.fillStyle=col; g.fillRect(x*cw, y*ch, cw+0.5, ch+0.5);
+  }
+  // 州府点（橙色 2×2）
+  g.fillStyle='#ffb24d';
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){ if(map[y][x].capital) g.fillRect(x*cw, y*ch, 2, 2); }
+  // 玩家主城点（白色 2×2）
+  g.fillStyle='#ffffff'; g.fillRect(playerHome[0]*cw, playerHome[1]*ch, 2, 2);
+  // 视口框：当前可见范围映射到小地图
+  const ww=W*CS*zoom, hh=H*CS*zoom;
+  const vx=(camX/ww)*MW, vy=(camY/hh)*MH, vw=(VW()/ww)*MW, vh=(VH()/hh)*MH;
+  g.fillStyle='rgba(120,180,255,.18)'; g.fillRect(vx,vy,vw,vh);
+  g.strokeStyle='rgba(120,180,255,.9)'; g.lineWidth=1; g.strokeRect(vx,vy,vw,vh);
+}
+// 小地图点击 → 换算到地图坐标并平移
+document.getElementById('minimap').addEventListener('click', e=>{
+  const mm=e.currentTarget, r=mm.getBoundingClientRect();
+  const rw=r.width||mm.width, rh=r.height||mm.height;   // 回退到固有尺寸（无布局环境下安全）
+  const fx=(e.clientX-r.left)/rw, fy=(e.clientY-r.top)/rh;
+  if(!isFinite(fx)||!isFinite(fy)) return;
+  panTo(fx*W, fy*H); render();
+});
 function drawFx(){
   for(const f of fxList){ const a=1-f.t/f.life; const xL=Math.round(f.x*CS*zoom-camX), xR=Math.round((f.x+1)*CS*zoom-camX), yT=Math.round(f.y*CS*zoom-camY), yB=Math.round((f.y+1)*CS*zoom-camY);
+    const cx=(xL+xR)/2, cy=(yT+yB)/2;
     if(f.type==='flash'){ ctx.strokeStyle = f.win?`rgba(124,252,138,${a})`:`rgba(255,123,123,${a})`; ctx.lineWidth=3; ctx.strokeRect(xL+2,yT+2,(xR-xL)-4,(yB-yT)-4); }
-    else if(f.type==='text'){ ctx.fillStyle=f.color; ctx.globalAlpha=a; ctx.font='bold '+Math.floor(CS*zoom*0.6)+'px sans-serif'; ctx.textAlign='center'; ctx.fillText(f.text, (xL+xR)/2, (yT+yB)/2); ctx.globalAlpha=1; ctx.textAlign='left'; }
+    else if(f.type==='text'){ const fs=Math.floor(CS*zoom*0.75); ctx.font='bold '+fs+'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.globalAlpha=1; ctx.lineWidth=Math.max(2, fs*0.14); ctx.strokeStyle='#fff'; ctx.strokeText(f.text, cx, cy);
+      ctx.globalAlpha=a; ctx.fillStyle=f.color; ctx.fillText(f.text, cx, cy);
+      ctx.globalAlpha=1; ctx.textAlign='left'; ctx.textBaseline='alphabetic'; }
+    else if(f.type==='expandRing'){ const baseR=(xR-xL)/2; const r=baseR*(0.3+1.4*(f.t/f.life));   // 半径随 t 增大
+      const t=f.t/f.life; const wg=Math.round(255-(255-215)*t), wb=Math.round(255-255*t);   // 白→金
+      ctx.strokeStyle=`rgba(255,${wg},${wb},${a})`; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.stroke(); }
+    else if(f.type==='particle'){ const px=cx+f.vx*f.t, py=cy+f.vy*f.t;
+      ctx.globalAlpha=a; ctx.fillStyle=f.color; ctx.beginPath(); ctx.arc(px,py,2,0,Math.PI*2); ctx.fill(); ctx.globalAlpha=1; }
   }
 }
 function sameOwner(x,y,owner){ const c = (map[y]&&map[y][x]); return c && c.owner===owner; }
@@ -516,11 +764,71 @@ function drawWeather(){
 }
 let weatherPhase=0, rafOn=false, lastFrame=0, shake=0;
 let fxList=[];   // 战斗特效：闪光 / 浮动文字
+let floatTexts=[];   // 资源产出飘字（类似 fxList 模式）
+let selectedCell=null;   // 当前选中格（呼吸高亮）
+window.floatTexts=floatTexts;
+// 数字滚动：顶栏资源从 targetRes 平滑插值到 displayRes
+let displayRes={粮:0,木:0,铁:0,石:0,币:0,玉:0};
+let targetRes={粮:0,木:0,铁:0,石:0,币:0,玉:0};
+window.displayRes=displayRes; window.targetRes=targetRes;
+
+// 资源飘字：在指定格上方飘出 +数值（向上减速上升）
+function addFloatText(x,y,text,color){
+  floatTexts.push({x,y,text,color,t:0,life:40,vy:-0.8,yoff:0});
+  ensureAnim();
+}
+// 绘制资源飘字（render 每帧调用）
+function drawFloatTexts(){
+  if(!floatTexts.length) return;
+  const cs=CS*zoom;
+  for(const f of floatTexts){
+    const xL=Math.round(f.x*CS*zoom-camX), yT=Math.round(f.y*CS*zoom-camY);
+    const a=1 - f.t/f.life;
+    const cx=xL+cs/2, cy=yT+cs*0.5 - f.yoff;
+    ctx.globalAlpha=Math.max(0,a);
+    ctx.fillStyle=f.color;
+    ctx.font='bold 12px "Microsoft YaHei",sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(f.text, cx, cy);
+  }
+  ctx.globalAlpha=1; ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+}
+// 数字滚动插值（在 animLoop 中调用），返回是否仍在变化
+function lerpRes(){
+  let changed=false;
+  for(const k in targetRes){
+    const d=targetRes[k]-displayRes[k];
+    if(Math.abs(d)>0.5){ displayRes[k]+=d*0.15; changed=true; }
+    else if(displayRes[k]!==targetRes[k]){ displayRes[k]=targetRes[k]; changed=true; }
+  }
+  if(changed) updateResBarDisplay();
+  return changed;
+}
+// 在随机 3~5 个玩家格飘出本回合资源产出
+function spawnResourceFloats(gain){
+  const cells=[];
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++) if(map[y][x].owner==='player') cells.push([x,y]);
+  if(!cells.length) return;
+  const colors={粮:'#7CFC8A',木:'#c8aa6e',铁:'#8899ab',石:'#e8a855',币:'#ffd700',玉:'#ff69b4'};
+  const types=Object.keys(gain).filter(k=>gain[k]>0);
+  if(!types.length) return;
+  const n=Math.min(cells.length, 3+Math.floor(Math.random()*3));   // 3~5
+  const chosen=[]; const pool=cells.slice();
+  for(let i=0;i<n;i++){ const idx=Math.floor(Math.random()*pool.length); chosen.push(pool.splice(idx,1)[0]); }
+  types.forEach((k,i)=>{ const cc=chosen[i%chosen.length]; addFloatText(cc[0],cc[1],'+'+gain[k]+' '+k, colors[k]); });
+}
 function addBattleFx(x,y,res){
   const win=res.result.includes('攻');
   fxList.push({type:'flash',x,y,t:0,life:16,win});
   fxList.push({type:'text',x,y,t:0,life:34,text:win?'占领!':'受挫',color:win?'#7CFC8A':'#ff7b7b'});
-  shake=6; ensureAnim();
+  if(win){
+    // 胜利冲击波：白色→金色 expandRing
+    fxList.push({type:'expandRing',x,y,t:0,life:20,win});
+    // 胜利粒子：12 个随机方向散开的小金点
+    for(let i=0;i<12;i++){ const ang=Math.random()*Math.PI*2, sp=1+Math.random()*2;
+      fxList.push({type:'particle',x,y,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,t:0,life:25,color:'#ffd700'}); }
+  }
+  shake = win?6:10; ensureAnim();
 }
 // 统一动画循环：相机缓动 + 特效推进 + 天气粒子；任一活跃则持续，全静则停（省电）
 function animLoop(ts){
@@ -529,8 +837,10 @@ function animLoop(ts){
   if(weatherKey!=='sun'){ weatherPhase=(weatherPhase+1)%100000; }
   if(shake>0) shake=Math.max(0, shake-0.4);
   for(let i=fxList.length-1;i>=0;i--){ fxList[i].t++; if(fxList[i].t>=fxList[i].life) fxList.splice(i,1); }
+  for(let i=floatTexts.length-1;i>=0;i--){ const f=floatTexts[i]; f.t++; f.yoff+=f.vy; f.vy*=0.9; if(f.t>=f.life) floatTexts.splice(i,1); }
+  const lerpActive = lerpRes();
   render();
-  const active = camEase || fxList.length>0 || weatherKey!=='sun';
+  const active = camEase || fxList.length>0 || weatherKey!=='sun' || floatTexts.length>0 || lerpActive || !!selectedCell;
   if(active) requestAnimationFrame(animLoop); else rafOn=false;
 }
 function ensureAnim(){ if(!rafOn){ rafOn=true; requestAnimationFrame(animLoop); } }
@@ -571,6 +881,8 @@ function clampZoom(z){ return Math.max(0.6,Math.min(3,z)); }
 // ---- 点击处理 ----
 function handleTap(x,y){
   const c=map[y][x];
+  selectedCell = (c.owner==='player') ? {x,y} : null;   // 选中玩家格高亮，点其他格清除
+  if(selectedCell) ensureAnim();   // 选中后让呼吸动画持续渲染
   if(ambushMode){
     if(c.owner!=='player'&&c.t==='forest'&&validTarget(x,y)){ c.ambush=true; c.owner='player'; toast('森林伏兵已布置（潜伏）'); openSheet(); }
     else if(c.t!=='forest') toast('伏兵需布在森林地块');
@@ -596,12 +908,46 @@ function handleTap(x,y){
   previewBattle(x,y);
 }
 function showInfo(x,y){ const c=map[y][x];
-  document.getElementById('info').innerHTML=`地形【${R.TERRAIN[c.t].name}】｜归属：${c.owner==='player'?'我方':isAI(c.owner)?'敌军':'中立'}｜守军：${c.soldiers||0}${c.upstream?'｜⚠️可水攻':''}`;
+  const isP=c.owner==='player', isE=isAI(c.owner), isN=c.owner==='none';
+  const regionName = (R.REGIONS&&c.region) ? R.REGIONS[c.region].name : '';
+  // 每回合产出估算
+  let prodText='';
+  if(isP && R.ECON){
+    const baseGain=R.ECON.perTurn(1,0,1,c.land, c.resource?1:0);
+    const parts=[];
+    for(const k of ['粮','木','铁','石','币']) if((baseGain[k]||0)>0) parts.push(`${k}+${Math.round(baseGain[k])}`);
+    if(parts.length) prodText=parts.join(' / ');
+  }
+  const actions = [];
+  if(isP){ actions.push({label:'📋 详情',act:()=>{}}); if(c.t==='forest') actions.push({label:'🎯 布伏兵',act:()=>{document.getElementById('btnAmbush').click();}}); }
+  else if(validTarget(x,y)) actions.push({label:'⚔️ 出征',act:()=>previewBattle(x,y)});
+  else if(isE && R.isAlly(DIP,'player',c.owner)) actions.push({label:'🤝 外交',act:()=>openDiplomacy(c.owner)});
+
+  let html=`<div style="margin-bottom:6px;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+      <span style="font-size:24px;">${GLYPH[c.t]||'·'}</span>
+      <div><b style="font-size:15px;color:#e0e6ed">${R.TERRAIN[c.t].name}</b>
+      ${c.capital?' <span style="color:#ffd479;font-size:11px;">★州府</span>':''}
+      ${c.resource?' <span style="color:#e8a855;font-size:11px;">💎资源</span>':''}</div></div>`;
+  html+=`<div style="display:flex;gap:12px;font-size:12px;color:#9aa4b0;">
+    <span>🏳️ ${isP?'<b style="color:#7cb3ff">我方</b>':isE?`<b style="${lordById(c.owner)?'color:'+lordById(c.owner).color:''}">${lordById(c.owner)?lordById(c.owner).name:'敌军'}</b>`:'中立'}</span>
+    <span>📐 Lv.${c.land||1}</span>
+    <span>⚔️ ${c.soldiers||0}守军</span></div>`;
+  if(regionName) html+=`<div style="font-size:11px;color:#777;margin-top:2px;">📍 ${regionName}</div>`;
+  if(prodText) html+=`<div style="font-size:11px;color:#7CFC8A;margin-top:4px;background:#182218;padding:4px 8px;border-radius:4px;">📦 每回合：${prodText}</div>`;
+  if(actions.length){
+    html+='<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;">';
+    actions.forEach(a=>html+=`<button onclick="(${a.act.toString()})()" style="padding:5px 12px;border:none;border-radius:6px;background:#3d7bd6;color:#fff;font-size:12px;cursor:pointer;">${a.label}</button>`);
+    html+='</div>';
+  }
+  html+='</div>';
+  document.getElementById('info').innerHTML=html;
   openSheet();
 }
 function hoverInfo(x,y){ const c=map[y][x];   // 桌面悬浮预览（不弹面板）
   if(!scouted(x,y)){ document.getElementById('info').innerHTML='迷雾区域（未侦察）'; return; }
-  document.getElementById('info').innerHTML=`地形【${R.TERRAIN[c.t].name}】｜${c.owner==='player'?'我方':isAI(c.owner)?'敌军':'中立'}｜守军：${c.soldiers||0}${validTarget(x,y)?'｜🎯可进攻':''}${c.upstream?'｜⚠️可水攻':''}`;
+  const vtag=validTarget(x,y)?'｜🎯可进攻':'';
+  document.getElementById('info').innerHTML=`${R.TERRAIN[c.t].name}｜${c.owner==='player'?'我方':isAI(c.owner)?lordById(c.owner)?.name||'敌军':'中立'}｜Lv.${c.land}｜守军${c.soldiers||0}${vtag}${c.upstream?'｜⚠️水攻':''}`;
 }
 
 // ---- 战斗 ----
@@ -651,21 +997,33 @@ function previewBattle(x,y){
 function commitBattle(){
   if(!pendingBattle) return;
   const {x,y,ambush,ambushFailed,att,def,ms,c,lvl}=pendingBattle; pendingBattle=null;
+  const wasPlayer = c.owner==='player';   // 记录占领前归属
+  taskCounters.attackCount++;             // 任务计数：每次出征+1
   const res=R.simulateCombat(att, def, {terrain:c.t, weather:weatherKey, ambush, ambushFailed, floodActive:c.floodTurns>0});
   const win = res.result.includes('攻');
   log(`⚔️ 出征【${R.TERRAIN[c.t].name}】vs 守军(Lv${lvl}) → <b class="${win?'win':'lose'}">${res.result}</b>`);
   res.log.slice(0,10).forEach(l=>log('· '+l));
-  if(win){ c.owner='player'; c.lvl=c.land; c.soldiers=0; c.ambush=false; c.upstream=false; log('✅ 占领成功，领地扩张！'); toast('🏆 占领成功！领地+1'); }
-  else { const loss=Math.round(c.soldiers*0.15); c.soldiers=Math.max(0,c.soldiers-loss); log('❌ 受挫，守军-'+loss+'，可再攻。'); toast('受挫，整军再来'); }
+  if(win){ c.owner='player'; c.lvl=c.land; c.soldiers=0; c.ambush=false; c.upstream=false; stats.battlesWon++;
+    stats.winStreak=(stats.winStreak||0)+1; stats.noLossStreak=(stats.noLossStreak||0)+1;
+    if(!wasPlayer) taskCounters.newLandCount++;
+    if(c.capital) taskCounters.captureCapital=true;
+    awardBattleXP(true, lvl);
+    checkAchievements();   // 检查成就解锁
+    log('✅ 占领成功，领地扩张！'); toast('🏆 占领成功！领地+1'); }
+  else { const loss=Math.round(c.soldiers*0.15); c.soldiers=Math.max(0,c.soldiers-loss); stats.battlesLost++;
+    stats.winStreak=0; stats.noLossStreak=0;
+    awardBattleXP(false, lvl);
+    checkAchievements();
+    log('❌ 受挫，守军-'+loss+'，可再攻。'); toast('受挫，整军再来'); }
   addBattleFx(x,y,res); panTo(x,y);
-  updateUpstream(); refreshTop(); render(); openSheet();
+  updateTaskProgress(); updateUpstream(); refreshTop(); render(); openSheet();
 }
 
 // ---- UI ----
 function log(t,cls){ const el=document.getElementById('log'); const d=document.createElement('div'); if(cls)d.className=cls; d.innerHTML=t; el.prepend(d); }
 function toast(t){ const el=document.getElementById('toast'); el.textContent=t; el.classList.add('show'); clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('show'),1600); }
-function openSheet(){ document.getElementById('sheet').classList.add('show'); }
-function closeSheet(){ document.getElementById('sheet').classList.remove('show'); }
+function openSheet(){ const s=document.getElementById('sheet'); if(!s) return; s.classList.add('show'); s.style.transform='translateY(0)'; }
+function closeSheet(){ const s=document.getElementById('sheet'); if(!s) return; s.classList.remove('show'); s.style.transform='translateY(100%)'; }
 // 外交面板：列出各诸侯与玩家关系，可切换 同盟/中立/敌对/附庸，敌对时可议和（信誉影响）
 function relLabel(s){ return s==='ally'?'同盟':s==='rival'?'敌对':s==='vassal'?'附庸':'中立'; }
 function openDiplomacy(focus){
@@ -749,7 +1107,29 @@ function checkEnd(){
     return;
   }
 }
-function endGame(res,msg){ gameOver=true; rafOn=false; log((res==='win'?'🏆 胜利':'💀 失败')+'：'+msg, res==='win'?'win':'lose'); toast((res==='win'?'🏆 ':'💀 ')+msg+'（点「剧本」重开）'); }
+function endGame(res,msg){ gameOver=true; rafOn=false; log((res==='win'?'🏆 胜利':'💀 失败')+'：'+msg, res==='win'?'win':'lose'); toast((res==='win'?'🏆 ':'💀 ')+msg+'（点「剧本」重开）'); showGameOver(res==='win'); }
+// 胜利/失败结算弹窗
+function showGameOver(win){
+  const ex=document.getElementById('gameOverOverlay'); if(ex) ex.remove();
+  const ov=document.createElement('div');
+  ov.id='gameOverOverlay';
+  ov.style.cssText='position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;padding:20px;';
+  const land=landCount('player');
+  const caps=countCapitals('player','all');
+  const won=stats.battlesWon||0, lost=stats.battlesLost||0;
+  ov.innerHTML=`
+    <div style="background:#1c2128;border-radius:16px;padding:24px;max-width:340px;text-align:center;border:2px solid ${win?'#7CFC8A':'#ff7b7b'};">
+      <h2 style="font-size:24px;margin:0 0 12px;color:${win?'#7CFC8A':'#ff7b7b'};">${win?'🎉 大业已成！':'💔 天命未至...'}</h2>
+      <p style="font-size:14px;color:#cfe0ff;line-height:1.8;margin:8px 0;">
+        ${win?`你在第 ${turnCount} 回合达成了胜利条件！`:`第 ${turnCount} 回合，你已无力再战...`}<br>
+        领土: ${land} 格 | 战斗: ${won}胜${lost}败<br>
+        州府: ${caps}/13 座
+      </p>
+      <button id="btnRestart" style="width:100%;min-height:48px;border:none;border-radius:10px;background:#3d7bd6;color:#fff;font-size:17px;margin-top:14px;">🔄 再战一局</button>
+    </div>`;
+  document.body.appendChild(ov);
+  document.getElementById('btnRestart').onclick=()=>{ location.reload(); };
+}
 // 剧本选择面板
 function victoryText(s){ const v=s.victory;
   if(v.type==='defeatLord'){ const tl=s.lords.find(l=>l.id===v.lordId); return '击灭'+(tl?tl.name:v.lordId); }
@@ -783,7 +1163,8 @@ function renderTrain(){
     const btn = done ? `<button disabled data-act="dismantle" data-id="${g.id}">已拆解</button>`
       : canDis ? `<button data-act="dismantle" data-id="${g.id}">拆解自带战法</button>`
       : `<button disabled data-act="dismantle" data-id="${g.id}" title="需先在上方开启「残卷拆解」">4★拆解（需开启残卷拆解）</button>`;
-    return `<div class="dipRow"><div class="dipTitle"><b>${g.name}</b> <span class="tag">自带 ${skName}</span>${is4?' <span class="tag">4★</span>':''}${done?' <span class="tag">已拆</span>':''}</div>`
+    return `<div class="dipRow"><div class="dipTitle"><b>${g.name}</b> <span style="color:#ffd479;font-size:11px;">Lv.${g.level}</span> <span class="tag">自带 ${skName}</span>${is4?' <span class="tag">4★</span>':''}${done?' <span class="tag">已拆</span>':''}</div>`
+      +`<div style="background:#181c22;border-radius:3px;height:5px;margin:3px 0;overflow:hidden;"><div style="width:${Math.min(100,Math.round(g.xp/xpForLevel(g.level+1)*100))}%;height:100%;background:#e8a855;border-radius:3px;"></div></div>`
       +`<div class="dipBtns">${btn}</div></div>`;
   }).join('');
   // 残卷拆解开关行
@@ -885,11 +1266,22 @@ document.getElementById('trainBody').addEventListener('click', e=>{
     }
   }
 });
-function renderRes(){
+function updateResBarDisplay(){
   const el=document.getElementById('resBar'); if(!el) return;
   const M=R.ECON?R.ECON.RES_META:null;
-  el.innerHTML = (R.ECON?R.ECON.TYPES:['粮','木','铁','石','币']).map(k=>`<span class="res">${(M&&M[k]?M[k].icon:'·')} <b>${RES[k]||0}</b><span>${k}</span></span>`).join('')
-    + `<span class="res">⚔️ <b>${playerSoldiers}</b><span>兵力</span></span>`;
+  const types=R.ECON?R.ECON.TYPES:['粮','木','铁','石','币'];
+  let html = types.map(k=>`<span class="res">${(M&&M[k]?M[k].icon:'·')} <b>${Math.round(displayRes[k]||0)}</b><span>${k}</span></span>`).join('');
+  html += `<span class="res">⚔️ <b>${playerSoldiers}</b><span>兵力</span></span>`;
+  el.innerHTML = html;
+}
+function renderRes(){
+  if(!R.ECON) return;
+  // 设置目标值，交给 lerpRes 平滑滚动；首帧直接对齐避免开局从 0 滚动
+  for(const k of R.ECON.TYPES){ targetRes[k] = RES[k]||0; }
+  let firstCall = true;
+  for(const k in targetRes){ if(displayRes[k]!==0){ firstCall=false; break; } }
+  if(firstCall){ for(const k in targetRes) displayRes[k]=targetRes[k]; updateResBarDisplay(); }
+  else ensureAnim();
 }
 function refreshTop(){ let land=0,enemy=0; for(let y=0;y<H;y++)for(let x=0;x<W;x++){ const o=map[y][x].owner; if(o==='player')land++; else if(o!=='none')enemy++; }
   document.getElementById('tLand').textContent='领地'+land;
@@ -941,7 +1333,7 @@ window.closeTrain=closeTrain;
 
 document.getElementById('btnTime').onclick=()=>{
   if(gameOver){ toast('本局已结束，点「剧本」重开'); return; }
-  time++; seasonKey=['spring','summer','autumn','winter'][Math.floor(time/3)%4]; weatherKey=pickW(R.SEASON[seasonKey].w);
+  time++; turnCount++; taskCounters.turnCount++; seasonKey=['spring','summer','autumn','winter'][Math.floor(time/3)%4]; weatherKey=pickW(R.SEASON[seasonKey].w);
   aiTurn();
   // 剧本事件触发（每个事件仅触发一次）
   R.eventsDueAt(SCN,time).forEach(ev=>{ if(appliedEvents[ev.at]) return; appliedEvents[ev.at]=true; applyEvent(ev); });
@@ -950,8 +1342,12 @@ document.getElementById('btnTime').onclick=()=>{
     for(let y=0;y<H;y++)for(let x=0;x<W;x++){ const c=map[y][x]; if(c.owner==='player'){ land++; landLevelSum+=c.land; if(c.resource) resourceLand++; if(c.t==='city') cities++; } }
     const gain=R.ECON.perTurn(land,cities,R.SEASON[seasonKey].grain,landLevelSum,resourceLand);
     const cityMul=1+0.05*cityLevel;   // 城建：资源产出 ×(1+5%/级)
-    for(const k in gain) RES[k]=(RES[k]||0)+Math.round(gain[k]*cityMul); }
-  refreshTop(); checkEnd(); render(); updateWeatherAnim();
+    const realGain={};
+    for(const k in gain){ realGain[k]=Math.round(gain[k]*cityMul); RES[k]=(RES[k]||0)+realGain[k]; }
+    taskCounters.turnProduction += Object.values(realGain).reduce((a,b)=>a+b,0);   // 任务计数
+    spawnResourceFloats(realGain);   // 资源飘字
+  }
+  updateTaskProgress(); refreshTop(); checkEnd(); render(); updateWeatherAnim();
   toast(`进入【${R.SEASON[seasonKey].name}】· 天气【${R.WEATHER[weatherKey].name}】· 诸侯已行动`);
   log('📊 势力：'+standings());
 };
@@ -970,14 +1366,113 @@ document.getElementById('btnRecruit').onclick=function(){
   renderRes(); toast('⚔️ 征兵 +'+add+'（现 '+playerSoldiers+'/队）');
 };
 document.getElementById('btnTrain').onclick=openTrain;
+document.getElementById('btnTask').onclick=openTask;
+document.getElementById('btnAch').onclick=openAchievements;
 
 // 缩放按钮（双指捏合之外的备用入口）
 document.getElementById('btnZoomIn').onclick=()=>{ zoom=clampZoom(zoom*1.25); clampCam(); render(); };
 document.getElementById('btnZoomOut').onclick=()=>{ zoom=clampZoom(zoom/1.25); clampCam(); render(); };
 
+// 回到主城：重新计算视口并平滑飞回
+document.getElementById('btnHome').onclick=()=>{ autoFitView(); panTo(playerHome[0],playerHome[1]); toast('🏠 回到主城'); render(); };
+// 双击画布也回主城
+let lastTapTime=0, lastTapCell=null;
+cv.addEventListener('dblclick', e=>{ e.preventDefault(); document.getElementById('btnHome').click(); }, {passive:false});
+
 // 首次引导层
-window.closeIntro=function(){ const el=document.getElementById('intro'); if(el) el.style.display='none'; try{ localStorage.setItem('tk_intro_v1','1'); }catch(e){} };
+window.closeIntro=function(){ const el=document.getElementById('intro'); if(el) el.style.display='none'; try{ localStorage.setItem('tk_intro_v1','1'); }catch(e){} checkTutorial(); };
 try{ if(localStorage.getItem('tk_intro_v1')){ const el=document.getElementById('intro'); if(el) el.style.display='none'; } }catch(e){}
+
+// ---- 交互式新手引导（5 步遮罩式）----
+window.TUTORIAL_STEPS = [
+  { target:'#mapWrap', text:'这是大地图🗺️\n拖动可平移，双指/滚轮缩放\n找到你的蓝色领地', align:'center' },
+  { target:null, text:'你的领地是蓝色的\n周围黄色高亮格可以攻击', align:'center', action:()=>{ autoFitView(); render(); } },
+  { target:'#btnTime', text:'每回合点这里推进时辰\n天气变化影响战斗', align:'above' },
+  { target:null, text:'点相邻的中立或敌军地块出征！', align:'center', action:()=>{ const t=findNearestValidTarget(playerHome[0],playerHome[1]); if(t){ panTo(t[0],t[1]); render(); } } },
+  { target:'#btnTrain', text:'养成里拆解武将获得战法\n装备后提升战斗力', align:'above' }
+];
+let tutorialStep = -1;
+let _tutChecked = false;
+
+// 找离主城最近的可攻地块（教程第4步高亮用）
+function findNearestValidTarget(hx,hy){
+  let best=null, bd=1e9;
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){ if(validTarget(x,y)){ const d=Math.hypot(x-hx,y-hy); if(d<bd){ bd=d; best=[x,y]; } } }
+  return best;
+}
+
+function showTutorialStep(idx){
+  tutorialStep = idx;
+  const step = TUTORIAL_STEPS[idx];
+  if(!step){ endTutorial(); return; }
+
+  // 遮罩层（z-index 70，高于 intro 的 60）
+  let ov = document.getElementById('tutorialOverlay');
+  if(!ov){ ov = document.createElement('div'); ov.id='tutorialOverlay';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:70;'; document.body.appendChild(ov); }
+  ov.style.background = 'rgba(0,0,0,.65)';
+
+  // 目标高亮遮罩（z-index 71，在遮罩层之上挖洞突出目标）
+  let mask = document.getElementById('tutorialMask');
+  if(!mask){ mask = document.createElement('div'); mask.id='tutorialMask';
+    mask.style.cssText = 'position:fixed;inset:0;z-index:71;pointer-events:none;'; document.body.appendChild(mask); }
+  mask.innerHTML = '';
+
+  // 说明卡片（z-index 72，最上层）
+  let card = document.getElementById('tutorialCard');
+  if(!card){ card = document.createElement('div'); card.id='tutorialCard'; document.body.appendChild(card); }
+  card.style.cssText = 'position:fixed;z-index:72;left:50%;top:50%;transform:translate(-50%,-50%);background:#1c2128;border-radius:14px;padding:18px;max-width:300px;text-align:center;border:1px solid #3d7bd6;';
+  card.innerHTML = `
+    <p style="font-size:15px;color:#e0e6ed;line-height:1.8;white-space:pre-line;margin:10px 0;">${step.text}</p>
+    <div style="display:flex;gap:8px;margin-top:12px;">
+      <button id="tutNext" style="flex:1;min-height:42px;border:none;border-radius:8px;background:#3d7bd6;color:#fff;font-size:15px;">${idx+1>=TUTORIAL_STEPS.length?'完成':'下一步'}</button>
+      <button id="tutSkip" style="flex:1;min-height:42px;border:none;border-radius:8px;background:#4a525c;color:#fff;font-size:15px;">跳过</button>
+    </div>
+    <div style="margin-top:8px;font-size:11px;color:#888;">${idx+1} / ${TUTORIAL_STEPS.length}</div>`;
+
+  // 高亮目标元素：四块遮罩围出目标区域（挖洞），并在目标上加高亮框
+  if(step.target){
+    const el = document.querySelector(step.target);
+    if(el){
+      const r = el.getBoundingClientRect();
+      ov.style.background = 'transparent';   // 变暗交给 mask 完成，避免盖住目标
+      mask.style.background = 'transparent';
+      const mk = (css)=>{ const d=document.createElement('div'); d.style.cssText='position:fixed;background:rgba(0,0,0,.65);pointer-events:none;'+css; mask.appendChild(d); };
+      mk(`left:0;top:0;right:0;height:${Math.max(0,r.top)}px;`);                                  // 上
+      mk(`left:0;bottom:0;right:0;height:${Math.max(0,window.innerHeight-r.bottom)}px;`);          // 下
+      mk(`left:0;top:${r.top}px;width:${Math.max(0,r.left)}px;height:${r.height}px;`);              // 左
+      mk(`right:0;top:${r.top}px;width:${Math.max(0,window.innerWidth-r.right)}px;height:${r.height}px;`); // 右
+      const hl = document.createElement('div');
+      hl.style.cssText = `position:fixed;left:${r.left-4}px;top:${r.top-4}px;width:${r.width+8}px;height:${r.height+8}px;border:2px solid #ffd479;border-radius:10px;box-shadow:0 0 12px rgba(255,212,121,.7);pointer-events:none;`;
+      mask.appendChild(hl);
+      // 目标在底部栏时，卡片放到目标上方避免遮挡
+      if(step.align==='above'){ card.style.top='auto'; card.style.bottom=(window.innerHeight-r.top+12)+'px'; card.style.transform='translateX(-50%)'; }
+    }
+  }
+
+  if(step.action) try{ step.action(); }catch(e){}
+
+  document.getElementById('tutNext').onclick = ()=>{ if(idx+1 < TUTORIAL_STEPS.length) showTutorialStep(idx+1); else endTutorial(); };
+  document.getElementById('tutSkip').onclick = endTutorial;
+}
+function endTutorial(){
+  const ov = document.getElementById('tutorialOverlay');
+  if(ov){ ov.style.transition='opacity .3s'; ov.style.opacity='0'; setTimeout(()=>{ if(ov&&ov.parentNode) ov.remove(); },300); }
+  const mask = document.getElementById('tutorialMask');
+  if(mask&&mask.parentNode) mask.remove();
+  const card = document.getElementById('tutorialCard');
+  if(card&&card.parentNode) card.remove();
+  tutorialStep = -1;
+  try{ localStorage.setItem('tk_tutorial_v1','1'); }catch(e){}
+  toast('✅ 引导完成！去征战天下吧');
+}
+function checkTutorial(){
+  if(_tutChecked) return;          // 防止重复触发
+  _tutChecked = true;
+  try{ if(localStorage.getItem('tk_tutorial_v1')) return; }catch(e){}
+  // 延迟显示：等 intro 关闭 + 地图渲染完
+  setTimeout(()=>showTutorialStep(0), 1200);
+}
 
 resize();                 // 先按容器尺寸初始化画布
 startScenario('thirteen');    // 默认开局：M2 十三州割据（占 3 州府胜），州界/土地/州府即时可见
@@ -987,6 +1482,7 @@ updateWeatherAnim();
 if(document.getElementById('intro').style.display!=='none'){
   toast('先看顶部【目标】，点黄框地出征');
 } else {
+  checkTutorial();   // 回头用户（intro 已关）仍可在首启动触发新手引导
   toast('点黄色地块出征；拖动平移，双指缩放；点“外交”结盟诸侯；点“剧本”换剧本');
 }
 </script>
