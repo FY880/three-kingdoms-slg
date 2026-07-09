@@ -648,6 +648,8 @@ function emptyFort(selfSoldiers, selfMax) {
     };
     // 城建加成：全军 atk/def 乘 cityBonus（敌方传入 1 即无加成）
     if (opts.cityBonus) { u.atkMul *= opts.cityBonus; u.defMul *= opts.cityBonus; }
+    // M2 州内加成光环：在本州（出生州）作战的微增益（≤5%，避免主场碾压）
+    if (opts.regionBonus) { const rb = (typeof opts.regionBonus === 'number') ? opts.regionBonus : 0.04; u.atkMul *= (1 + rb); u.defMul *= (1 + rb); }
     return u;
   }
 
@@ -1182,13 +1184,21 @@ function playerSetRel(b, s){
   openDiplomacy();
 }
 
+// M2 州内加成光环：取某势力出生格所属州 id（用于判定「在本州作战」）
+function homeRegion(owner){
+  if(owner==='player'){ const c=map[playerHome[1]]&&map[playerHome[1]][playerHome[0]]; return c?c.region:''; }
+  const L=lordById(owner); if(L&&L.home){ const c=map[L.home[1]]&&map[L.home[1]][L.home[0]]; return c?c.region:''; }
+  return '';
+}
 // 任意地块的守军（玩家/AI/中立统一）
 function defenderArmy(tile){
   // 我方守军享受宝物与城建加成；敌方/中立不享受玩家宝物与城建
   const trFor = id => (tile.owner==='player' && equippedTreasures[id]) ? [R.TREASURES[equippedTreasures[id]]].filter(Boolean) : [];
   const cityMul = tile.owner==='player' ? (1 + 0.02*cityLevel) : 1;
-  if(tile.owner==='player'){ const u=activeRoster().slice(0,3).map((id,i)=>R.makeUnit(id,playerSoldiers,i===0?'fengshi':(i===1?'heyi':'yulin'),{morale:85, treasures:trFor(id), cityBonus:cityMul})); return {units:u,total:playerSoldiers*Math.min(3,activeRoster().length)}; }
-  if(isAI(tile.owner)){ const L=lordById(tile.owner); const u=L.gen.map((id,i)=>R.makeUnit(id,L.strength,i===0?'fengshi':'heyi',{morale:80, treasures:trFor(id), cityBonus:cityMul})); return {units:u,total:L.strength*3}; }
+  const homeReg = tile.owner==='player' ? homeRegion('player') : (isAI(tile.owner) ? homeRegion(tile.owner) : '');
+  const regionBonus = !!homeReg && tile.region===homeReg;   // 在本州（出生州）守土 → 微增益
+  if(tile.owner==='player'){ const u=activeRoster().slice(0,3).map((id,i)=>R.makeUnit(id,playerSoldiers,i===0?'fengshi':(i===1?'heyi':'yulin'),{morale:85, treasures:trFor(id), cityBonus:cityMul, regionBonus})); return {units:u,total:playerSoldiers*Math.min(3,activeRoster().length)}; }
+  if(isAI(tile.owner)){ const L=lordById(tile.owner); const u=L.gen.map((id,i)=>R.makeUnit(id,L.strength,i===0?'fengshi':'heyi',{morale:80, treasures:trFor(id), cityBonus:cityMul, regionBonus})); return {units:u,total:L.strength*3}; }
   const pool=['lv1','zhang1','huang1','sun1','sima1','liu1'];
   const n=Math.max(1,Math.min(5,1+Math.floor(tile.land/2))); const u=[];
   for(let i=0;i<n;i++){ const g=pool[ri(0,pool.length-1)]; u.push(R.makeUnit(g,Math.round(tile.soldiers/Math.max(1,n)),i===0?'fangyuan':'yulin',{morale:75, treasures:trFor(g), cityBonus:cityMul})); }
@@ -1227,7 +1237,8 @@ function aiAttack(lord,cand){
   const defGen = (cand.def && cand.def.units && cand.def.units[0]) ? cand.def.units[0].g : null;
   const attGen = (lord.gen && lord.gen[0]) ? R.GENERALS.find(g=>g.id===lord.gen[0]) : null;
   const fk = R.chooseFormation(attGen, defGen, tile.t);   // 针对克制选阵法
-  const att=lord.gen.map((id,i)=>R.makeUnit(id,lord.strength,i===0?fk:'heyì',{morale:80}));
+  const atkHome=homeRegion(lord.id); const regionBonus=(tile.region===atkHome && atkHome!='');
+  const att=lord.gen.map((id,i)=>R.makeUnit(id,lord.strength,i===0?fk:'heyì',{morale:80, regionBonus}));
   const res=R.simulateCombat(att, cand.def.units, {terrain:tile.t, weather:weatherKey, ambush:false, floodActive:tile.floodTurns>0});
   if(res.result.includes('攻')){
     const wasPlayer = tile.owner==='player';
@@ -1512,7 +1523,8 @@ function previewBattle(x,y){
   const att=activeRoster().slice(0,3).map((id,i)=>{
     const trId=equippedTreasures[id];
     const treasures = trId ? [R.TREASURES[trId]].filter(Boolean) : [];
-    return R.makeUnit(id,playerSoldiers,i===0?'fengshi':(i===1?'heyi':'yulin'),{morale:85, treasures, cityBonus: 1 + 0.02*cityLevel});
+    const myHome=homeRegion('player'); const regionBonus = (c.region===myHome && myHome!=='');
+    return R.makeUnit(id,playerSoldiers,i===0?'fengshi':(i===1?'heyi':'yulin'),{morale:85, treasures, cityBonus: 1 + 0.02*cityLevel, regionBonus});
   });
   const def=defenderArmy(c).units;
   pendingBattle={x,y,ambush,ambushFailed,att,def,ms,c,lvl};

@@ -118,6 +118,8 @@ function emptyFort(selfSoldiers, selfMax) {
     };
     // 城建加成：全军 atk/def 乘 cityBonus（敌方传入 1 即无加成）
     if (opts.cityBonus) { u.atkMul *= opts.cityBonus; u.defMul *= opts.cityBonus; }
+    // M2 州内加成光环：在本州（出生州）作战的微增益（≤5%，避免主场碾压）
+    if (opts.regionBonus) { const rb = (typeof opts.regionBonus === 'number') ? opts.regionBonus : 0.04; u.atkMul *= (1 + rb); u.defMul *= (1 + rb); }
     return u;
   }
 

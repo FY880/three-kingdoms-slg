@@ -58,6 +58,12 @@ setTimeout(() => {
     const vt = win.eval(`(()=>{ for(let y=0;y<H;y++)for(let x=0;x<W;x++){ if(map[y][x].owner==='player'){ for(const d of[[1,0],[-1,0],[0,1],[0,-1]]){ const ny=y+d[1],nx=x+d[0]; const n=map[ny]&&map[ny][nx]; if(n&&n.owner!=='player') return validTarget(nx,ny); } } } return null; })()`);
     check('连地规则可用(相邻敌/中立可攻)', vt===true, 'validTarget='+vt);
 
+    // —— 验收 11：州内加成光环（regionBonus ≤5%，本州作战 atk/def 微增）——
+    const seam = win.eval(`(()=>{ const base=R.makeUnit('guan1',1000,'fengshi',{morale:85}); const buff=R.makeUnit('guan1',1000,'fengshi',{morale:85, regionBonus:true}); return {a:base.atkMul, b:Math.round(buff.atkMul*1e6)/1e6, def:Math.round(buff.defMul*1e6)/1e6, defB:base.defMul}; })()`);
+    check('州内光环：regionBonus ×1.04', seam.b>seam.a && Math.abs(seam.b-seam.a*1.04)<1e-6 && Math.abs(seam.def-seam.defB*1.04)<1e-6, `atk ${seam.a}→${seam.b}`);
+    const integ = win.eval(`(()=>{ const hr=homeRegion('player'); let homeCell=null, farCell=null; for(let y=0;y<H;y++)for(let x=0;x<W;x++){ const c=map[y][x]; if(c.owner==='player'&&c.region===hr&&!homeCell) homeCell=c; if(!farCell&&c.region!==hr) farCell=c; } if(!homeCell||!farCell) return null; farCell.owner='player'; const a=defenderArmy(homeCell).units[0].atkMul, b=defenderArmy(farCell).units[0].atkMul; farCell.owner='none'; return {a,b}; })()`);
+    check('州内光环(集成)：本州守军 atk 更高(~1.04×)', integ && integ.a>integ.b && integ.a/integ.b>1.03 && integ.a/integ.b<1.05, integ?`${integ.b.toFixed(3)}→${integ.a.toFixed(3)}`:'n/a');
+
     // —— 验收 3：州府占领触发胜利（holdCapital）——
     win.eval(`startScenario('thirteen'); window.__end=null; const _oe=endGame; endGame=function(r,m){ window.__end=r; _oe(r,m); };`);
     win.eval(`(()=>{ let n=0; for(let y=0;y<H;y++)for(let x=0;x<W;x++){ if(map[y][x].capital && n<3){ map[y][x].owner='player'; n++; } } return n; })()`);
