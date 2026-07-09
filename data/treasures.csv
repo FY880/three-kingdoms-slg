@@ -1,0 +1,11 @@
+id,name,slot,stat,bonusPct,desc
+chitu,赤兔马,速,speed,0.12,日行千里的名驹大幅提升装备将速度
+dilu,的卢,速,speed,0.08,的卢马负重越溪提升装备将速度
+qinglongdao,青龙偃月刀,武,force,0.12,关羽的寒冰偃月刀大幅提升装备将武力
+zhangba,丈八蛇矛,武,force,0.10,张飞的丈八蛇矛提升装备将武力
+huaji,方天画戟,武,force,0.13,吕布的方天画戟极大提升装备将武力
+shuanggu,雌雄双股剑,武,force,0.09,刘备双剑提升装备将武力
+taiping,太平要术,谋,intellect,0.10,于吉所传道书提升装备将智力
+bazhen,八阵图,谋,leadership,0.10,诸葛亮所布阵图提升装备将统率
+huxin,护心镜,防,def,0.10,护心铜镜提升装备将防御
+hufu,虎符,辅,leadership,0.08,调兵虎符提升装备将统率

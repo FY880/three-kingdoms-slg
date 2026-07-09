@@ -57,7 +57,8 @@
     SKILLS:     { get() { return DATA.state.SKILLS; },     enumerable: true, configurable: true },
     TROOPS:     { get() { return DATA.state.TROOPS; },     enumerable: true, configurable: true },
     FACTIONS:   { get() { return DATA.state.FACTIONS; },   enumerable: true, configurable: true },
-    BONDS:      { get() { return DATA.state.BONDS; },      enumerable: true, configurable: true }
+    BONDS:      { get() { return DATA.state.BONDS; },      enumerable: true, configurable: true },
+    TREASURES:  { get() { return DATA.state.TREASURES; },  enumerable: true, configurable: true }
   });
 
   if (typeof window !== 'undefined') window.RULES = RULES;

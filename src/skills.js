@@ -20,7 +20,7 @@
 
   // 发动率：基础 + 属性差 + 阵营羁绊加成
   function fireRate(skill, caster) {
-    const stat = skill.school === '谋略' ? (caster.g.intellect || 0) : (caster.g.force || 0);
+    const stat = skill.school === '谋略' ? (caster.intellect != null ? caster.intellect : caster.g.intellect) : (caster.force != null ? caster.force : caster.g.force);
     const base = skill.rate + (stat - 80) * 0.22 + (caster.bondRate || 0) * 100;
     return clamp(Math.round(base), 25, 92);
   }
@@ -52,11 +52,17 @@
         log.push(`📜 ${unit.g.name} 施【${sk.name}】· 全军 ${sk.desc}`);
       } else if (sk.type === '被动') {
         if (sk.immuneCtrl) unit.immuneCtrl = true;
-        if (sk.buffDefPct) unit.defMul *= (1 + sk.buffDefPct);
-        if (sk.debuffAtkPct) army.forEach(en => en.alive && (en.foeHitDown = (en.foeHitDown || 0) + sk.debuffAtkPct));
+        if (sk.id === 'kongcheng') {
+          // 空城：不常驻加防御，改为标记；战斗中残血时由 emptyFort 临时放大（见 combat.simulateCombat）
+          unit.emptyFort = true;
+          log.push(`🛡 ${unit.g.name} 常驻【${sk.name}】· 残血时触发（空城计）`);
+        } else {
+          if (sk.buffDefPct) unit.defMul *= (1 + sk.buffDefPct);
+          if (sk.debuffAtkPct) army.forEach(en => en.alive && (en.foeHitDown = (en.foeHitDown || 0) + sk.debuffAtkPct));
+        }
         if (sk.healPct) unit.regenPct = (unit.regenPct || 0) + sk.healPct;
         if (sk.buffMorale) unit.regenMorale = (unit.regenMorale || 0) + sk.buffMorale;
-        log.push(`🛡 ${unit.g.name} 常驻【${sk.name}】· ${sk.desc}`);
+        if (sk.id !== 'kongcheng') log.push(`🛡 ${unit.g.name} 常驻【${sk.name}】· ${sk.desc}`);
       }
     }
   }

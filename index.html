@@ -53,6 +53,14 @@
   #scnSheet .close { position:absolute; right:12px; top:10px; background:#3a414b; color:#fff; border:none; border-radius:6px; padding:4px 10px; font-size:13px; }
   .scnPick { display:block; width:100%; margin-top:8px; min-height:38px; font-size:13px; border:none; border-radius:7px; color:#fff; background:#4a525c; }
   .scnPick.on { background:#d68a3d; }
+  /* 养成面板 */
+  #trainSheet { position:fixed; left:0; right:0; bottom:0; max-height:80%; background:#1c2128; border-top:2px solid #3d7bd6;
+    border-radius:14px 14px 0 0; transform:translateY(100%); transition:transform .22s ease; z-index:27; padding:12px 14px calc(14px + env(safe-area-inset-bottom)); overflow:auto; }
+  #trainSheet.show { transform:translateY(0); }
+  #trainSheet h3 { margin:10px 0 6px; font-size:14px; color:#9ec5ff; }
+  #trainSheet h3:first-child { margin-top:0; }
+  #trainSheet .close { position:absolute; right:12px; top:10px; background:#3a414b; color:#fff; border:none; border-radius:6px; padding:4px 10px; font-size:13px; }
+  #trainBody .dipBtns button { min-height:32px; font-size:12px; padding:0 8px; }
   #toast { position:fixed; left:50%; top:14%; transform:translateX(-50%); background:rgba(0,0,0,.8); padding:8px 14px;
     border-radius:8px; font-size:13px; z-index:30; opacity:0; transition:opacity .2s; pointer-events:none; max-width:86%; text-align:center;}
   #toast.show{opacity:1;}
@@ -106,6 +114,7 @@
     <button id="btnReload" class="alt">配表</button>
     <button id="btnReset" class="alt">重置</button>
     <button id="btnRecruit" class="alt">征兵</button>
+    <button id="btnTrain" class="alt">养成</button>
   </div>
 </div>
 <div id="sheet">
@@ -130,6 +139,11 @@
   <h3>选择剧本</h3>
   <div class="dipNote">不同剧本的诸侯、出生点、中立强度与胜负条件各不相同。切换即重开一局。</div>
   <div id="scnBody"></div>
+</div>
+<div id="trainSheet">
+  <button class="close" onclick="closeTrain()">收起</button>
+  <h3>养成 · 战法 / 宝物 / 城建</h3>
+  <div id="trainBody" style="margin-top:6px"></div>
 </div>
 <div id="intro"><div id="introCard">
   <h2>三国 SLG · 怎么玩</h2>
@@ -156,6 +170,7 @@
 <script src="src/rules.js"></script>
 <script>
 const R = window.RULES;
+const DATA = window.RULES_DATA;   // 直接访问可变 state（拆解/装配/宝物/升级即时改 state.GENERALS）
 // 资源经济（粮/木/铁/石/币）与玩家可征兵力
 let RES = (R.ECON ? R.ECON.starting() : {粮:2000,木:800,铁:600,石:600,币:300});
 let playerSoldiers = 1400;   // 出征单队兵力，征兵可提升
@@ -181,6 +196,8 @@ function refreshDataRefs(){ TK=Object.keys(R.TERRAIN); }
 let AI_LORDS=[];
 const LORD_BY_ID={};
 const ROSTER=['cao1','guan1','zhao1','zhu1','zhou1'];
+// 养成系统（Demo 级状态）：战法书库存 / 已拆解标记 / 宝物装备映射(将→宝物id) / 城建等级
+let skillBooks=[], dismantled={}, equippedTreasures={}, cityLevel=0;
 function isAI(o){ return o&&o.startsWith('ai_'); }
 function lordById(o){ return LORD_BY_ID[o]; }
 
@@ -235,11 +252,14 @@ function playerSetRel(b, s){
 
 // 任意地块的守军（玩家/AI/中立统一）
 function defenderArmy(tile){
-  if(tile.owner==='player'){ const u=ROSTER.slice(0,3).map((id,i)=>R.makeUnit(id,playerSoldiers,i===0?'fengshi':(i===1?'heyi':'yulin'),{morale:85})); return {units:u,total:playerSoldiers*3}; }
-  if(isAI(tile.owner)){ const L=lordById(tile.owner); const u=L.gen.map((id,i)=>R.makeUnit(id,L.strength,i===0?'fengshi':'heyi',{morale:80})); return {units:u,total:L.strength*3}; }
+  // 我方守军享受宝物与城建加成；敌方/中立不享受玩家宝物与城建
+  const trFor = id => (tile.owner==='player' && equippedTreasures[id]) ? [R.TREASURES[equippedTreasures[id]]].filter(Boolean) : [];
+  const cityMul = tile.owner==='player' ? (1 + 0.02*cityLevel) : 1;
+  if(tile.owner==='player'){ const u=ROSTER.slice(0,3).map((id,i)=>R.makeUnit(id,playerSoldiers,i===0?'fengshi':(i===1?'heyi':'yulin'),{morale:85, treasures:trFor(id), cityBonus:cityMul})); return {units:u,total:playerSoldiers*3}; }
+  if(isAI(tile.owner)){ const L=lordById(tile.owner); const u=L.gen.map((id,i)=>R.makeUnit(id,L.strength,i===0?'fengshi':'heyi',{morale:80, treasures:trFor(id), cityBonus:cityMul})); return {units:u,total:L.strength*3}; }
   const pool=['lv1','zhang1','huang1','sun1','sima1','liu1'];
   const n=Math.min(3,1+Math.floor(tile.lvl/2)); const u=[];
-  for(let i=0;i<n;i++){ const g=pool[ri(0,pool.length-1)]; u.push(R.makeUnit(g,Math.round(tile.soldiers/Math.max(1,n)),i===0?'fangyuan':'yulin',{morale:75})); }
+  for(let i=0;i<n;i++){ const g=pool[ri(0,pool.length-1)]; u.push(R.makeUnit(g,Math.round(tile.soldiers/Math.max(1,n)),i===0?'fangyuan':'yulin',{morale:75, treasures:trFor(g), cityBonus:cityMul})); }
   return {units:u,total:tile.soldiers};
 }
 
@@ -524,7 +544,11 @@ function previewBattle(x,y){
   const ambushFailed = !!ambushSrc && !det;
   if(ambushSrc) ambushSrc.ambush=false;   // 伏兵发动或暴露后清除
   const ms=R.miaoSuan({weather:weatherKey,attTerrain:'plain',defTerrain:c.t,attMorale:85,leadAvg:92});
-  const att=ROSTER.slice(0,3).map((id,i)=>R.makeUnit(id,playerSoldiers,i===0?'fengshi':(i===1?'heyi':'yulin'),{morale:85}));
+  const att=ROSTER.slice(0,3).map((id,i)=>{
+    const trId=equippedTreasures[id];
+    const treasures = trId ? [R.TREASURES[trId]].filter(Boolean) : [];
+    return R.makeUnit(id,playerSoldiers,i===0?'fengshi':(i===1?'heyi':'yulin'),{morale:85, treasures, cityBonus: 1 + 0.02*cityLevel});
+  });
   const def=defenderArmy(c).units;
   pendingBattle={x,y,ambush,ambushFailed,att,def,ms,c,lvl};
   const win = ms.winProb>=55, tie = ms.winProb>=40;
@@ -637,6 +661,102 @@ function openScenario(){
 }
 function closeScenario(){ document.getElementById('scnSheet').classList.remove('show'); }
 document.getElementById('scnBody').addEventListener('click', e=>{ const b=e.target.closest('button'); if(!b) return; startScenario(b.dataset.id); });
+// ---- 养成面板：战法拆解/装配、宝物装备、升战法/城建 ----
+function closeTrain(){ document.getElementById('trainSheet').classList.remove('show'); }
+function openTrain(){ renderTrain(); document.getElementById('trainSheet').classList.add('show'); }
+function renderTrain(){
+  const el=document.getElementById('trainBody');
+  if(!el) return;
+  const gName=id=>{ const g=DATA.state.GENERALS.find(x=>x.id===id); return g?g.name:id; };
+  // 1) 战法拆解（自带战法 skills[0]）
+  const disRows=ROSTER.map(id=>{
+    const g=DATA.state.GENERALS.find(x=>x.id===id);
+    const own=g.skills[0]; const skName=R.SKILLS[own]?R.SKILLS[own].name:own;
+    const done=dismantled[g.id];
+    return `<div class="dipRow"><div class="dipTitle"><b>${g.name}</b> <span class="tag">自带 ${skName}</span>${done?' <span class="tag">已拆</span>':''}</div>`
+      +`<div class="dipBtns"><button data-act="dismantle" data-id="${g.id}" ${done?'disabled':''}>拆解自带战法</button></div></div>`;
+  }).join('');
+  // 1) 战法书库存 + 装配 + 已装配（可卸下）
+  let booksHtml;
+  if(!skillBooks.length){ booksHtml='<div class="dipNote">暂无战法书。先拆解武将自带战法获得战法书（每将仅可拆一次）。</div>'; }
+  else {
+    booksHtml=skillBooks.map(sid=>{
+      const sk=R.SKILLS[sid]; if(!sk) return '';
+      const targets=ROSTER.filter(tid=>{ const g=DATA.state.GENERALS.find(x=>x.id===tid); return g.skills.length<3 && !g.skills.includes(sid); });
+      const btns=targets.map(tid=>`<button data-act="equip" data-sid="${sid}" data-tid="${tid}">装给${gName(tid)}</button>`).join('') || '<span class="dipNote">无可装配武将</span>';
+      return `<div class="dipRow"><div class="dipTitle"><b>${sk.name}</b> <span class="tag">${sk.type}</span></div><div class="dipBtns">${btns}</div></div>`;
+    }).join('');
+  }
+  const equipRows=ROSTER.map(id=>{
+    const g=DATA.state.GENERALS.find(x=>x.id===id);
+    if(g.skills.length<=1) return '';
+    const extra=g.skills.slice(1).map((sid,i)=>{ const sk=R.SKILLS[sid]; const realIdx=i+1;
+      return `<button data-act="unequip" data-id="${id}" data-idx="${realIdx}">卸 ${sk?sk.name:sid}</button>`; }).join('');
+    return `<div class="dipRow"><div class="dipTitle"><b>${g.name}</b> 已装配：</div><div class="dipBtns">${extra}</div></div>`;
+  }).filter(Boolean).join('');
+  // 2) 宝物装备
+  const trKeys=Object.keys(R.TREASURES);
+  const trRows=(trKeys.length?trKeys.map(id=>{
+    const t=R.TREASURES[id];
+    const targets=ROSTER.map(tid=>`<button data-act="equipTr" data-tid="${tid}" data-tr="${id}">${gName(tid)}</button>`).join('');
+    const eq=Object.keys(equippedTreasures).find(k=>equippedTreasures[k]===id);
+    const eqTag=eq?` <span class="tag">已装备:${gName(eq)}</span>`:'';
+    return `<div class="dipRow"><div class="dipTitle"><b>${t.name}</b> <span class="tag">${t.slot}</span> <span class="tag">+${(t.bonusPct*100).toFixed(0)}% ${t.stat}</span>${eqTag}</div><div class="dipBtns">${targets}</div></div>`;
+  }).join(''):'<div class="dipNote">暂无宝物（检查 treasures.csv 是否载入）。</div>');
+  // 3) 升战法 / 城建
+  const upRows=ROSTER.map(id=>{
+    const g=DATA.state.GENERALS.find(x=>x.id===id);
+    const cost=R.ECON.upgradeSkillCost(g.level);
+    const can=g.level<15;
+    const afford=(RES['币']||0)>=cost['币'] && (RES['铁']||0)>=cost['铁'];
+    const label=can?`升战法 Lv${g.level}→${g.level+1}（币${cost['币']}/铁${cost['铁']}）`:'已达15级上限';
+    return `<div class="dipRow"><div class="dipTitle"><b>${g.name}</b> Lv${g.level}</div><div class="dipBtns"><button data-act="upgrade" data-id="${id}" ${can&&afford?'':'disabled'}>${label}</button></div></div>`;
+  }).join('');
+  const cc=R.ECON.cityCost();
+  const canCity=cityLevel<10;
+  const affordCity=(RES['木']||0)>=cc['木']&&(RES['铁']||0)>=cc['铁']&&(RES['石']||0)>=cc['石']&&(RES['币']||0)>=cc['币'];
+  const cityRow=`<div class="dipRow"><div class="dipTitle"><b>城建</b> Lv${cityLevel}（全军攻/防 +${(cityLevel*2)}%，资源产出 +${(cityLevel*5)}%）</div>`
+    +`<div class="dipBtns"><button data-act="city" ${canCity&&affordCity?'':'disabled'}>升级城建→${cityLevel+1}（木${cc['木']}/铁${cc['铁']}/石${cc['石']}/币${cc['币']}）</button></div></div>`;
+  el.innerHTML=`<h3>① 战法拆解 / 装配</h3>`+disRows
+    +`<h3>② 战法书库存（${skillBooks.length}）</h3>`+booksHtml
+    +(equipRows?`<h3>③ 已装配（可卸下，退回战法书）</h3>`+equipRows:'')
+    +`<h3>④ 宝物装备（每将1件，可替换）</h3>`+trRows
+    +`<h3>⑤ 升战法 / 城建</h3>`+upRows+cityRow
+    +`<div class="dipNote">拆解/装配/宝物/升级即时影响出征；宝物与城建仅作用于我方出征队伍，敌方不享受。</div>`;
+}
+document.getElementById('trainBody').addEventListener('click', e=>{
+  const b=e.target.closest('button'); if(!b||b.disabled) return;
+  const act=b.dataset.act;
+  if(act==='dismantle'){
+    const g=DATA.state.GENERALS.find(x=>x.id===b.dataset.id);
+    if(dismantled[g.id]) return;
+    const sid=g.skills[0];
+    skillBooks.push(sid); dismantled[g.id]=true;
+    toast(`拆解【${g.name}】自带战法「${R.SKILLS[sid]?R.SKILLS[sid].name:sid}」入库`); renderTrain();
+  } else if(act==='equip'){
+    const tid=b.dataset.tid, sid=b.dataset.sid;
+    const g=DATA.state.GENERALS.find(x=>x.id===tid);
+    if(g.skills.length<3 && !g.skills.includes(sid)){ g.skills.push(sid); const bi=skillBooks.indexOf(sid); if(bi>=0) skillBooks.splice(bi,1); toast(`已装配「${R.SKILLS[sid].name}」给 ${g.name}」（消耗战法书 1 本）`); renderTrain(); renderRes(); }
+  } else if(act==='unequip'){
+    const g=DATA.state.GENERALS.find(x=>x.id===b.dataset.id);
+    const idx=parseInt(b.dataset.idx,10);
+    if(idx>0 && idx<g.skills.length){ const sid=g.skills.splice(idx,1)[0]; skillBooks.push(sid); toast(`卸下「${R.SKILLS[sid]?R.SKILLS[sid].name:sid}」退回战法书`); renderTrain(); renderRes(); }
+  } else if(act==='equipTr'){
+    const tid=b.dataset.tid, tr=b.dataset.tr;
+    equippedTreasures[tid]=tr; toast(`已将「${R.TREASURES[tr].name}」装备给 ${DATA.state.GENERALS.find(x=>x.id===tid).name}`); renderTrain();
+  } else if(act==='upgrade'){
+    const g=DATA.state.GENERALS.find(x=>x.id===b.dataset.id);
+    if(g.level>=15) return;
+    const cost=R.ECON.upgradeSkillCost(g.level);
+    if((RES['币']||0)>=cost['币'] && (RES['铁']||0)>=cost['铁']){ RES['币']-=cost['币']; RES['铁']-=cost['铁']; g.level++; toast(`${g.name} 升战法至 Lv${g.level}（属性与发动率提升）`); renderTrain(); renderRes(); }
+  } else if(act==='city'){
+    if(cityLevel>=10) return;
+    const cc=R.ECON.cityCost();
+    if((RES['木']||0)>=cc['木']&&(RES['铁']||0)>=cc['铁']&&(RES['石']||0)>=cc['石']&&(RES['币']||0)>=cc['币']){
+      RES['木']-=cc['木']; RES['铁']-=cc['铁']; RES['石']-=cc['石']; RES['币']-=cc['币']; cityLevel++; toast(`城建升至 Lv${cityLevel}（全军攻/防+2%/级，产出+5%/级）`); renderTrain(); renderRes();
+    }
+  }
+});
 function renderRes(){
   const el=document.getElementById('resBar'); if(!el) return;
   const M=R.ECON?R.ECON.RES_META:null;
@@ -684,6 +804,7 @@ window.addEventListener('resize',resize);
 window.closeSheet=closeSheet;
 window.closeDiplomacy=closeDiplomacy;
 window.closeScenario=closeScenario;
+window.closeTrain=closeTrain;
 
 document.getElementById('btnTime').onclick=()=>{
   if(gameOver){ toast('本局已结束，点「剧本」重开'); return; }
@@ -693,7 +814,9 @@ document.getElementById('btnTime').onclick=()=>{
   R.eventsDueAt(SCN,time).forEach(ev=>{ if(appliedEvents[ev.at]) return; appliedEvents[ev.at]=true; applyEvent(ev); });
   // 资源产出：领地/城池 → 粮木铁石币（随季节）
   if(R.ECON){ const land=landCount('player'); let cities=0; for(let y=0;y<H;y++)for(let x=0;x<W;x++){ if(map[y][x].owner==='player'&&map[y][x].t==='city') cities++; }
-    const gain=R.ECON.perTurn(land,cities,R.SEASON[seasonKey].grain); for(const k in gain) RES[k]=(RES[k]||0)+gain[k]; }
+    const gain=R.ECON.perTurn(land,cities,R.SEASON[seasonKey].grain);
+    const cityMul=1+0.05*cityLevel;   // 城建：资源产出 ×(1+5%/级)
+    for(const k in gain) RES[k]=(RES[k]||0)+Math.round(gain[k]*cityMul); }
   refreshTop(); checkEnd(); render(); updateWeatherAnim();
   toast(`进入【${R.SEASON[seasonKey].name}】· 天气【${R.WEATHER[weatherKey].name}】· 诸侯已行动`);
   log('📊 势力：'+standings());
@@ -712,6 +835,7 @@ document.getElementById('btnRecruit').onclick=function(){
   playerSoldiers=Math.min(3000, playerSoldiers+add);
   renderRes(); toast('⚔️ 征兵 +'+add+'（现 '+playerSoldiers+'/队）');
 };
+document.getElementById('btnTrain').onclick=openTrain;
 
 // 缩放按钮（双指捏合之外的备用入口）
 document.getElementById('btnZoomIn').onclick=()=>{ zoom=clampZoom(zoom*1.25); clampCam(); render(); };
@@ -723,6 +847,8 @@ try{ if(localStorage.getItem('tk_intro_v1')){ const el=document.getElementById('
 
 resize();                 // 先按容器尺寸初始化画布
 startScenario('melee');    // 生成地图、居中、渲染、关闭面板
+// 启动时尝试加载 data/*.csv（http 服务或单文件构建均可）；file:// 下 fetch 失败则静默回退内置 DEFAULTS
+R.loadConfigFromServer('data/').then(()=>{ refreshDataRefs(); buildLegend(); refreshTop(); render(); if(typeof renderTrain==='function') renderTrain(); toast('已载入最新配表（含追击战法 / 宝物）'); }).catch(()=>{});
 updateWeatherAnim();
 if(document.getElementById('intro').style.display!=='none'){
   toast('先看顶部【目标】，点黄框地出征');
