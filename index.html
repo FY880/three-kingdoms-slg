@@ -4,6 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>三国 SLG · 手机版 Demo</title>
+<meta name="theme-color" content="#11141a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
 <style>
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html,body { margin:0; height:100%; overflow:hidden; background:#11141a; color:#e6e6e6;
@@ -1484,6 +1489,11 @@ if(document.getElementById('intro').style.display!=='none'){
 } else {
   checkTutorial();   // 回头用户（intro 已关）仍可在首启动触发新手引导
   toast('点黄色地块出征；拖动平移，双指缩放；点“外交”结盟诸侯；点“剧本”换剧本');
+}
+
+// PWA：注册 Service Worker（仅 https/localhost 有效；file:// 静默忽略）
+if('serviceWorker' in navigator && location.protocol!=='file:'){
+  window.addEventListener('load', ()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); });
 }
 </script>
 </body>

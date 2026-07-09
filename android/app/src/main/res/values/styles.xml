@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 全屏沉浸式主题（无 ActionBar / 无标题） -->
+    <style name="Theme.SLG.Fullscreen" parent="android:Theme.Material.NoActionBar.Fullscreen">
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:statusBarColor">#11141a</item>
+        <item name="android:navigationBarColor">#11141a</item>
+        <item name="android:windowBackground">#11141a</item>
+    </style>
+</resources>
