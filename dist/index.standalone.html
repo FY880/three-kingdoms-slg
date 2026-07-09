@@ -1870,7 +1870,7 @@ window.closeIntro=function(){ const el=document.getElementById('intro'); if(el) 
 try{ if(localStorage.getItem('tk_intro_v1')){ const el=document.getElementById('intro'); if(el) el.style.display='none'; } }catch(e){}
 
 resize();                 // 先按容器尺寸初始化画布
-startScenario('melee');    // 生成地图、居中、渲染、关闭面板
+startScenario('thirteen');    // 默认开局：M2 十三州割据（占 3 州府胜），州界/土地/州府即时可见
 // 启动时尝试加载 data/*.csv（http 服务或单文件构建均可）；file:// 下 fetch 失败则静默回退内置 DEFAULTS
 R.loadConfigFromServer('data/').then(()=>{ refreshDataRefs(); buildLegend(); refreshTop(); render(); if(typeof renderTrain==='function') renderTrain(); toast('已载入最新配表（含追击战法 / 宝物）'); }).catch(()=>{});
 updateWeatherAnim();

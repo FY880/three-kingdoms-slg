@@ -21,6 +21,10 @@ setTimeout(() => {
   const out = [], results = [];
   const check = (name, cond, extra='') => { results.push(!!cond); out.push((cond?'PASS':'FAIL')+' | '+name+(extra?'  ['+extra+']':'')); };
   try {
+    // —— 验收 0：默认开局剧本 = 十三州割据（M2 州府胜利可体验）——
+    const defScn = win.eval('SCN && SCN.id');
+    check('默认开局剧本=十三州割据', defScn==='thirteen', 'SCN='+defScn);
+
     // —— 验收 1：十三州全覆盖 + 无未定义 region ——
     const cov = win.eval(`(()=>{ const ids=new Set(); let undef=0; for(let y=0;y<H;y++)for(let x=0;x<W;x++){ const r=map[y][x].region; if(!r||r==='') undef++; else ids.add(r); } return {size:ids.size, undef, ok:(ids.size===13&&undef===0)}; })()`);
     check('十三州全覆盖(13 且无空 region)', cov.ok, `size=${cov.size} undef=${cov.undef}`);
