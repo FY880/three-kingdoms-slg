@@ -224,7 +224,28 @@ function applyScenario(id){
   reputation=50; playerHome=SCN.playerHome.slice(); appliedEvents={}; gameOver=false;
   initRelations();
 }
-function startScenario(id){ applyScenario(id); genMap(); buildLegend(); refreshTop(); render(); closeScenario(); toast('剧本【'+SCN.name+'】'+SCN.desc); log('📜 剧本【'+SCN.name+'】'+SCN.desc); }
+// 自动适配视口：开局后计算玩家领土包围盒，自动设 zoom 让领地居中且填满屏幕 ~78%
+function autoFitView(){
+  let minX=W, maxX=0, minY=H, maxY=0;
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    if(map[y][x].owner==='player'){
+      if(x<minX)minX=x; if(x>maxX)maxX=x;
+      if(y<minY)minY=y; if(y>maxY)maxY=y;
+    }
+  }
+  // 无领地时回退到 playerHome
+  if(minX>maxX){ minX=maxX=playerHome[0]; minY=maxY=playerHome[1]; }
+  // 外扩两格让周边可见
+  minX=Math.max(0,minX-2); maxX=Math.min(W-1,maxX+2);
+  minY=Math.max(0,minY-2); maxY=Math.min(H-1,maxY+2);
+  const tw=maxX-minX+1, th=maxY-minY+1;
+  const targetZoomX=VW()/(tw*CS), targetZoomY=VH()/(th*CS);
+  zoom=clampZoom(Math.min(targetZoomX,targetZoomY)*0.78);
+  const cx=(minX+maxX)/2, cy=(minY+maxY)/2;
+  camX=cx*CS*zoom-VW()/2; camY=cy*CS*zoom-VH()/2;
+  clampCam();
+}
+function startScenario(id){ applyScenario(id); genMap(); buildLegend(); autoFitView(); refreshTop(); render(); closeScenario(); toast('剧本【'+SCN.name+'】'+SCN.desc); log('📜 剧本【'+SCN.name+'】'+SCN.desc); }
 // 调试/测试访问器：返回内部状态引用（供冒烟测试与调试，不影响玩法）
 function getState(){ return {map, SCN, playerHome, DIP, gameOver, AI_LORDS, appliedEvents}; }
 
@@ -387,7 +408,8 @@ function genMap(){
 function paint(cx,cy,r,owner){ for(let y=cy-r;y<=cy+r;y++)for(let x=cx-r;x<=cx+r;x++){ if(map[y]&&map[y][x]&&((x-cx)**2+(y-cy)**2)<=r*r){ const c=map[y][x]; if(c.t==='river')continue; c.owner=owner; c.land=Math.max(c.land||1,5); c.lvl=c.land; c.soldiers=0; } } }
 function updateUpstream(){ for(let y=0;y<H;y++)for(let x=0;x<W;x++){ const c=map[y][x]; c.upstream=false;
   if(c.t==='lowland'&&c.owner!=='player'){ for(const[dx,dy]of[[1,0],[-1,0],[0,1],[0,-1]]){ const n=map[y+dy]&&map[y+dy][x+dx]; if(n&&n.t==='river'&&n.owner==='player') c.upstream=true; } } } }
-function scouted(x,y){ for(let dy=-3;dy<=3;dy++)for(let dx=-3;dx<=3;dx++){ const n=map[y+dy]&&map[y+dy][x+dx]; if(n&&n.owner==='player') return true; } return map[y][x].owner==='player'; }
+// 全图可见：单机 SLG 无战争迷雾，整张地图地形与势力一目了然
+function scouted(x,y){ return true; }
 function validTarget(x,y,dip){ if(map[y][x].owner==='player') return false;
   for(const[dx,dy]of[[1,0],[-1,0],[0,1],[0,-1]]){ const n=map[y+dy]&&map[y+dy][x+dx]; if(n&&n.owner==='player') return true; }
   // 借道行军：目标与盟友相邻，且该盟友又与我方相邻 → 可经盟友领地出击
