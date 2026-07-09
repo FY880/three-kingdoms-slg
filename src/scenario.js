@@ -32,7 +32,16 @@
         { id: 'ai_liu', name: '刘备·蜀', home: [14, 10], personality: '外交', color: '#4bb0d2', strength: 1400, gen: ['liu1', 'zhang1', 'huang1'] },
         { id: 'ai_sun', name: '孙权·吴', home: [66, 46], personality: '稳健', color: '#5fbf6a', strength: 1450, gen: ['sun1', 'zhou1', 'lu1'] },
         { id: 'ai_dong', name: '董卓', home: [40, 44], personality: '侵略', color: '#c79a3d', strength: 1850, gen: ['lv1', 'sima1', 'zhang1'] }
-      ], events: [{ at: 4, type: 'rivalAll', target: 'ai_dong', msg: '董卓乱政！各路诸侯自发讨董，董卓成众矢之的' }] }
+      ],       events: [{ at: 4, type: 'rivalAll', target: 'ai_dong', msg: '董卓乱政！各路诸侯自发讨董，董卓成众矢之的' }] },
+    // M2 示范剧本：十三州割据，先据 3 州府者号令天下（州府/土地等级见 genMap 州郡层）
+    { id: 'thirteen', name: '十三州割据', desc: '群雄划州而治，先据三州府者号令天下。',
+      playerHome: [8, 50], neutralMul: 1.1, victory: { type: 'holdCapital', target: 'all', count: 3 },
+      lords: [
+        { id: 'ai_cao', name: '曹操·魏', home: [72, 6], personality: '霸权', color: '#d24b4b', strength: 1500, gen: ['cao1', 'guan1', 'zhao1'] },
+        { id: 'ai_liu', name: '刘备·蜀', home: [10, 10], personality: '外交', color: '#4bb0d2', strength: 1400, gen: ['liu1', 'zhang1', 'huang1'] },
+        { id: 'ai_sun', name: '孙权·吴', home: [66, 46], personality: '稳健', color: '#5fbf6a', strength: 1450, gen: ['sun1', 'zhou1', 'lu1'] },
+        { id: 'ai_dong', name: '董卓', home: [40, 44], personality: '侵略', color: '#c79a3d', strength: 1600, gen: ['lv1', 'sima1', 'zhang1'] }
+      ], events: [] }
   ];
   function getScenario(id) { return SCENARIOS.find(s => s.id === id) || SCENARIOS[0]; }
   function eventsDueAt(scn, time) { return (scn.events || []).filter(e => time >= e.at); }

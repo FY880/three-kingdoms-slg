@@ -1,0 +1,14 @@
+id,name,color,cx,cy,resource
+ji,冀州,#c0504d,60,8,false
+you,幽州,#6a5acd,64,2,false
+bing,并州,#4a8f8f,52,4,false
+qing,青州,#3cb371,66,16,false
+yan,兖州,#d98841,54,18,false
+xu,徐州,#c0508d,64,26,false
+sili,司隶,#b0b0b0,46,20,false
+yu,豫州,#8fbc4a,54,30,false
+jing,荆州,#4f9bd6,48,38,false
+yang,扬州,#e0b050,62,42,true
+yi,益州,#5fae6a,34,40,true
+liang,凉州,#a0522d,20,20,false
+jiao,交州,#9b6db0,56,52,false

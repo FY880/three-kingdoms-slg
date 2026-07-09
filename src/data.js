@@ -104,7 +104,23 @@
     /* —— 宝物（武/谋/防/速/辅；force/intellect/leadership/speed/def） —— */
     TREASURES: {},
     /* —— 战法书「残卷」标记：generalId -> { skillId: true }（4★ 拆解产出，装配效果 ×0.9） —— */
-    WEAK: {}
+    WEAK: {},
+    /* —— M2 州郡元表（13 州定义 + 州府坐标 + 资源旗），reload 时由 regions.csv 覆盖 —— */
+    REGIONS: {
+      ji:{id:'ji',name:'冀州',color:'#c0504d',cx:60,cy:8,resource:false},
+      you:{id:'you',name:'幽州',color:'#6a5acd',cx:64,cy:2,resource:false},
+      bing:{id:'bing',name:'并州',color:'#4a8f8f',cx:52,cy:4,resource:false},
+      qing:{id:'qing',name:'青州',color:'#3cb371',cx:66,cy:16,resource:false},
+      yan:{id:'yan',name:'兖州',color:'#d98841',cx:54,cy:18,resource:false},
+      xu:{id:'xu',name:'徐州',color:'#c0508d',cx:64,cy:26,resource:false},
+      sili:{id:'sili',name:'司隶',color:'#b0b0b0',cx:46,cy:20,resource:false},
+      yu:{id:'yu',name:'豫州',color:'#8fbc4a',cx:54,cy:30,resource:false},
+      jing:{id:'jing',name:'荆州',color:'#4f9bd6',cx:48,cy:38,resource:false},
+      yang:{id:'yang',name:'扬州',color:'#e0b050',cx:62,cy:42,resource:true},
+      yi:{id:'yi',name:'益州',color:'#5fae6a',cx:34,cy:40,resource:true},
+      liang:{id:'liang',name:'凉州',color:'#a0522d',cx:20,cy:20,resource:false},
+      jiao:{id:'jiao',name:'交州',color:'#9b6db0',cx:56,cy:52,resource:false}
+    }
   };
 
   // 可变 state：热加载时只重赋值属性，不换对象 → 所有引用保持有效
@@ -119,7 +135,8 @@
     FACTIONS:  DEFAULTS.FACTIONS,
     BONDS:     DEFAULTS.BONDS,
     TREASURES: DEFAULTS.TREASURES,
-    WEAK:      DEFAULTS.WEAK
+    WEAK:      DEFAULTS.WEAK,
+    REGIONS:   DEFAULTS.REGIONS
   };
 
   /* ---------- CSV 解析 / 转换 ---------- */
@@ -146,6 +163,7 @@
   function toFactions(rows){ const o={}; rows.forEach(r=>{ o[r.id]={name:r.name,bondAtkPct:num(r.bondAtkPct,0),bondDefPct:num(r.bondDefPct,0),bondRate:num(r.bondRate,0)}; }); return o; }
   function toBonds(rows){ const o={}; rows.forEach(r=>{ o[r.id]={name:r.name,members:(r.members? r.members.split(/[;]/).map(s=>s.trim()).filter(Boolean):[]),atkPct:num(r.atkPct,0),rate:num(r.rate,0),desc:r.desc}; }); return o; }
   function toTreasures(rows){ return rows.reduce((o, r) => { o[r.id] = { id:r.id, name:r.name, slot:r.slot, stat:r.stat, bonusPct:num(r.bonusPct,0), desc:r.desc }; return o; }, {}); }
+  function toRegions(rows){ const o={}; rows.forEach(r=>{ o[r.id]={id:r.id,name:r.name,color:r.color,cx:num(r.cx,0),cy:num(r.cy,0),resource:r.resource==='true'||r.resource===true}; }); return o; }
 
   // 用解析后的 CSV 覆盖内置数据（热加载）
   function reload(cfg) {
@@ -159,13 +177,14 @@
     if (cfg.factions)  state.FACTIONS   = toFactions(cfg.factions);
     if (cfg.bonds)     state.BONDS      = toBonds(cfg.bonds);
     if (cfg.treasures) state.TREASURES  = toTreasures(cfg.treasures);
+    if (cfg.regions)   state.REGIONS    = toRegions(cfg.regions);
     return true;
   }
   // 浏览器：从 data/ 拉取 CSV 并热加载（file:// 下 fetch 失败则 Demo 回退内置默认）
   async function loadConfigFromServer(base) {
     base = base || 'data/';
     const files = {terrain:'terrain.csv',weather:'weather.csv',season:'season.csv',formations:'formations.csv',generals:'generals.csv',
-                   skills:'skills.csv',troops:'troops.csv',factions:'factions.csv',bonds:'bonds.csv',treasures:'treasures.csv'};
+                   skills:'skills.csv',troops:'troops.csv',factions:'factions.csv',bonds:'bonds.csv',treasures:'treasures.csv',regions:'regions.csv'};
     const cfg = {};
     for (const k in files) { const res = await fetch(base + files[k]); if (!res.ok) throw new Error('缺少 ' + files[k]); cfg[k] = parseCSV(await res.text()); }
     reload(cfg); return cfg;
@@ -175,7 +194,7 @@
     const fs = (typeof require !== 'undefined') ? require('fs') : null;
     if (!fs) throw new Error('loadCSVFromDir 仅 Node 环境可用');
     const files = {terrain:'terrain.csv',weather:'weather.csv',season:'season.csv',formations:'formations.csv',generals:'generals.csv',
-                   skills:'skills.csv',troops:'troops.csv',factions:'factions.csv',bonds:'bonds.csv',treasures:'treasures.csv'};
+                   skills:'skills.csv',troops:'troops.csv',factions:'factions.csv',bonds:'bonds.csv',treasures:'treasures.csv',regions:'regions.csv'};
     const cfg = {};
     for (const k in files) { cfg[k] = parseCSV(fs.readFileSync(dir + '/' + files[k], 'utf8')); }
     return reload(cfg);
